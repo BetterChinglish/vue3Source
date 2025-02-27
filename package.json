@@ -1,0 +1,17 @@
+{
+  "name": "vue3source",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.5.2",
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "minimist": "^1.2.8",
+    "typescript": "^5.7.3"
+  }
+}
