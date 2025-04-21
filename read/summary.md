@@ -676,16 +676,158 @@ document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
 
 其实我们每次执行前将这个属性的依赖绑定清除掉，并在执行副作用时重新触发get中的track重新收集依赖
 
-考虑第三次settimeout，当修改textA时，触发set，触发trigger，执行对应的副作用函数
+考虑第三次settimeout，当修改textA时，触发set，set中触发trigger，执行对应的副作用函数
 在执行副作用函数之前，我们先将这个要执行的副作用函数给清除掉，然后再执行，执行时会再去重新收集依赖
 
+我们拿下面这段例子来说明
 
+```js
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  const fn1 = () => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  }
+  // 使用effect
+  effect(fn1)
 
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  
+```
 
+在上述代码2处的settimeout中修改ok, 则ok字段应该对应有一个set, 其中存放着使用过ok字段的所有副作用方法, 当然也包含fn1这个副作用方法, 
+set中的trigger执行, 也会触发这个fn1方法执行,
+那么在fn1执行之前, 我们要找到所有存放过fn1这个副作用方法的set, 并将这些set中的这个fn1方法全部删除
 
+在这个例子中, 存放过fn1副作用方法的set有两个, 分别是ok字段对应的set与textA字段对应的set, 
+则我们会将这两个set中的fn1删除, 注意这两个set中还可能存放其他的副作用方法
 
+在触发fn1前删除, 删除后再次触发fn1执行, 此时fn1中的代码(**document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';**)
+又会去访问ok字段, 则触发ok字段的get与get中的track方法进行依赖收集, 但是注意, ok的get方法此时应该是返回的false, 因为刚刚settimeout中将其修改为false了,
+那么这个三元表达式不会访问proxyObj.textA, 则textA对应的set中不会再有fn1, 那么再在前面代码示例中第三个settimeout修改textA, 不会再触发fn1
 
+```js
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
 
+  const fn1 = () => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  }
+  
+  // 使用effect
+  effect(fn1)
+  
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+```
+
+到这里, 原理我们说明白了, 那么如何去做呢? 
+其实也很简单, 我们对activeEffect添加一个数组属性, 在track中将set放进去, 然后再在fn执行时将这个数组中的set的这个副作用方法删除即可,
+具体步骤如下:
+1. 副作用函数上添加属性deps, 他是一个数组, 存放哪些字段的set中有当前的副作用函数 
+2. track捕获副作用函数时, 将当前字段对应的set存放进deps这个数组中, 即 deps.push(set)
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除 
+4. 执行副作用函数, 触发get, 触发track, 重新收集依赖
+
+上述步骤中我们提到, **在真正的副作用函数执行前**, 这其实要求我们对副作用函数封装一层
+```js
+
+const effectFn = () => {
+  // 这是清楚副作用函数的逻辑
+  cleanUp(effectFn);
+  
+  // 捕获副作用函数
+  activeEffect = effectFn;
+  
+  // 触发真正的副作用函数
+  fn();
+}
+
+```
+
+则原先的effect方法变为了如下代码, 也就是步骤1要做的事情
+1. 副作用函数上添加属性deps, 他是一个数组, 存放哪些字段的set中有当前的副作用函数
+```js
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑, 后续实现
+    cleanUp(effectFn);
+    
+    // 捕获副作用函数
+    activeEffect = effectFn;
+    
+    // 触发真正的副作用函数
+    fn();
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+```
+
+步骤2则只需要我们在track方法中添加一行
+2. track捕获副作用函数时, 将当前字段对应的set存放进deps这个数组中, 即 deps.push(set)
+```js
+// get中追踪副作用方法
+function track(target, key) {
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  
+  // 要添加的代码 (将副作用函数列表set添加到当前副作用函数的deps数组中)
+  activeEffect.deps.push(dependsSet);
+}
+```
+
+步骤3其实就是步骤1中cleanUp的实现
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除
+```js
+function cleanUp(effectFn) {
+  // effectFn.deps是一个数组, 存放着所有依赖这个副作用方法effectFn的字段的副作用函数列表set
+  for(const deps of effectFn.deps) {
+    // deps则是某个字段的副作用函数列表set, 我们将其中的当前副作用函数effectFn删除即可
+    deps.delete(effectFn);
+  }
+  // 清空副作用函数的deps
+  effectFn.deps.length = 0;
+}
+```
 
 
 

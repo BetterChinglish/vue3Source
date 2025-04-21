@@ -10,5 +10,9 @@
     "esModuleInterop": true,    // 允许es6语法引入commonjs模块
     "jsx": "preserve",  // jsx不转义
     "lib": ["es2016", "dom"], // 支持的类库， esnext以及dom
+    "baseUrl": ".",
+    "paths": {
+      "@vue/*": ["packages/*/src"]
+    }
   }
 }

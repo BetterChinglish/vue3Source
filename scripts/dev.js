@@ -28,4 +28,7 @@ const require = createRequire(import.meta.url);
 
 
 // 我们后续默认每个模块的入口文件都是src/index.ts
-const entry = resolve(__dirname, `../packages/${target}/src/index.ts`);
+const entry = resolve( __dirname, `../packages/${target}/src/index.ts` );
+
+
+

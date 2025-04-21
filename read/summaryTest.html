@@ -16,8 +16,29 @@ let activeEffect;
 
 // 实现一个方法捕获副作用函数
 function effect(fn) {
-  activeEffect = fn;
-  fn();
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    activeEffect = effectFn;
+
+    // 触发真正的副作用函数
+    fn();
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+
+function cleanUp(effectFn) {
+  // effectFn.deps是一个数组, 存放着所有依赖这个副作用方法effectFn的字段的副作用函数列表set
+  for(const deps of effectFn.deps) {
+    // deps则是某个字段的副作用函数列表set, 我们将其中的当前副作用函数effectFn删除即可
+    deps.delete(effectFn);
+  }
+  // 清空副作用函数的deps
+  effectFn.deps.length = 0;
 }
 
 // 存储全局某个对象的某个属性的副作用函数
@@ -55,6 +76,8 @@ function track(target, key) {
   }
   // 添加副作用
   dependsSet.add(activeEffect);
+  // 将副作用函数列表set添加到当前副作用函数的deps数组中
+  activeEffect.deps.push(dependsSet);
 }
 // set中触发副作用方法
 function trigger(target, key) {
