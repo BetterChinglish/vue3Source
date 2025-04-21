@@ -385,6 +385,10 @@ function toProxy(obj) {
 }
 // get中追踪副作用方法
 function track(target, key) {
+  // 没有activeEffect直接return
+  if(!activeEffect) {
+    return;
+  }
   // 找到当前对象target对应的map
   let dependsMap = globalDependsMap.get(target);
   // 没有则为该对象创建
@@ -485,6 +489,10 @@ effect(() => {
   }
   // get中追踪副作用方法
   function track(target, key) {
+    // 没有activeEffect直接return
+    if(!activeEffect) {
+      return;
+    }
     // 找到当前对象target对应的map
     let dependsMap = globalDependsMap.get(target);
     // 没有则为该对象创建
@@ -668,8 +676,8 @@ document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
 
 其实我们每次执行前将这个属性的依赖绑定清除掉，并在执行副作用时重新触发get中的track重新收集依赖
 
-考虑第三次settimeout，当修改textA时，触发set，我们将上一次的依赖复制一份下来，
-再将globalDependsMap中对应的依赖清除，再执行复制的依赖，这样在执行依赖的时候，又会触发get重新收集依赖，这样就完成了依赖的更新
+考虑第三次settimeout，当修改textA时，触发set，触发trigger，执行对应的副作用函数
+在执行副作用函数之前，我们先将这个要执行的副作用函数给清除掉，然后再执行，执行时会再去重新收集依赖
 
 
 
