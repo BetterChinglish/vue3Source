@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+<script>
+/* 响应式原理代码区域 */
+
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 存储全局某个对象的某个属性的副作用函数
+const globalDependsMap = new WeakMap();
+// 将对象转为代理对象
+function toProxy(obj) {
+  return new Proxy(obj, {
+    get(target, key) {
+      // 追踪副作用函数
+      track(target, key);
+      // get实现
+      return target[key];
+    },
+    set(target, key, newVal) {
+      // set实现
+      target[key] = newVal;
+      // 副作用函数的触发
+      trigger(target, key)
+    }
+  })
+}
+// get中追踪副作用方法
+function track(target, key) {
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+}
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  dependsSet && dependsSet.forEach(fn => fn());
+}
+
+/* 测试相关代码区域 */
+
+// 响应式数据测试
+function reactiveSystemTest() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B'
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.textA;
+  })
+  
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('change', originalData);
+  }, 1500)
+  
+  setTimeout(() => {
+    // 修改textB，查看textA的副作用方法是否执行
+    proxyObj.textB = 'bababa';
+    console.log('change', originalData);
+  }, 3000)
+}
+
+// WeakMap与Map的垃圾回收测试
+function weakMapAndMapGarbageCollectionTest() {
+  const m = new Map();
+  const wm = new WeakMap();
+  
+  (function() {
+    const world = 'hello world';
+    m.set('world', world);
+    
+    const sayWords = {
+      text: 'hello javascript'
+    };
+    wm.set(sayWords, '那咋了')
+  })()
+  
+  setTimeout(() => {
+    console.log(m, wm)
+  }, 3000)
+}
+
+
+function reactiveSystemTest4BranchSwitch() {
+  // 原始数据
+  const originalData = {
+    ok: true,
+    textA: 'test A',
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+  
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  })
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+}
+
+/* 测试代码执行区域 */
+try{
+  // reactiveSystemTest();
+  // weakMapAndMapGarbageCollectionTest();
+  
+  reactiveSystemTest4BranchSwitch();
+} catch (e) {
+  console.log(e)
+}
+</script>
+</body>
+</html>
