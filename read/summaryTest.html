@@ -13,6 +13,7 @@
 
 // 用于存放副作用函数
 let activeEffect;
+const effectStack = [];
 
 // 实现一个方法捕获副作用函数
 function effect(fn) {
@@ -21,10 +22,12 @@ function effect(fn) {
     cleanUp(effectFn);
 
     // 捕获副作用函数
+    effectStack.push(effectFn);
     activeEffect = effectFn;
-
     // 触发真正的副作用函数
     fn();
+    effectStack.pop();
+    activeEffect = effectStack[effectStack.length - 1];
   }
   // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
   effectFn.deps = [];
@@ -191,12 +194,48 @@ function reactiveSystemTest4BranchSwitch() {
   }, 3000)
 }
 
+
+function reactiveSystemTest4NestedEffect() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B',
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+
+  effect(() => {  // 副作用方法1
+    // 副作用方法执行
+    effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+
+    effect(() => {  // 副作用方法2
+      console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+    })
+
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)
+
+    effectCount++;
+  })
+
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('changed', originalData);
+  }, 1500)
+
+}
+
 /* 测试代码执行区域 */
 try{
   // reactiveSystemTest();
   // weakMapAndMapGarbageCollectionTest();
-  
-  reactiveSystemTest4BranchSwitch();
+  // reactiveSystemTest4BranchSwitch();
+
+  reactiveSystemTest4NestedEffect();
 } catch (e) {
   console.log(e)
 }

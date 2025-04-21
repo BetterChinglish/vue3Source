@@ -938,11 +938,391 @@ after change {ok: false, textA: 'balabala'}
 
 可见第三个settimeout中修改textA并不会再次执行effect中放入的匿名函数
 
+至此, 测试代码目前如下所示:
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+<script>
+/* 响应式原理代码区域 */
+
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    activeEffect = effectFn;
+
+    // 触发真正的副作用函数
+    fn();
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+
+function cleanUp(effectFn) {
+  // effectFn.deps是一个数组, 存放着所有依赖这个副作用方法effectFn的字段的副作用函数列表set
+  for(const deps of effectFn.deps) {
+    // deps则是某个字段的副作用函数列表set, 我们将其中的当前副作用函数effectFn删除即可
+    deps.delete(effectFn);
+  }
+  // 清空副作用函数的deps
+  effectFn.deps.length = 0;
+}
+
+// 存储全局某个对象的某个属性的副作用函数
+const globalDependsMap = new WeakMap();
+// 将对象转为代理对象
+function toProxy(obj) {
+  return new Proxy(obj, {
+    get(target, key) {
+      // 追踪副作用函数
+      track(target, key);
+      // get实现
+      return target[key];
+    },
+    set(target, key, newVal) {
+      // set实现
+      target[key] = newVal;
+      // 副作用函数的触发
+      trigger(target, key)
+    }
+  })
+}
+// get中追踪副作用方法
+function track(target, key) {
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  // 将副作用函数列表set添加到当前副作用函数的deps数组中
+  activeEffect.deps.push(dependsSet);
+}
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  const effectsSetToRun = new Set(dependsSet);
+  effectsSetToRun.forEach(fn => fn());
+}
+
+/* 测试相关代码区域 */
+
+// 响应式数据测试
+function reactiveSystemTest() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B'
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.textA;
+  })
+  
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('change', originalData);
+  }, 1500)
+  
+  setTimeout(() => {
+    // 修改textB，查看textA的副作用方法是否执行
+    proxyObj.textB = 'bababa';
+    console.log('change', originalData);
+  }, 3000)
+}
+
+// WeakMap与Map的垃圾回收测试
+function weakMapAndMapGarbageCollectionTest() {
+  const m = new Map();
+  const wm = new WeakMap();
+  
+  (function() {
+    const world = 'hello world';
+    m.set('world', world);
+    
+    const sayWords = {
+      text: 'hello javascript'
+    };
+    wm.set(sayWords, '那咋了')
+  })()
+  
+  setTimeout(() => {
+    console.log(m, wm)
+  }, 3000)
+}
 
 
+function reactiveSystemTest4BranchSwitch() {
+  // 原始数据
+  const originalData = {
+    ok: true,
+    textA: 'test A',
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+  
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  })
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+}
+
+/* 测试代码执行区域 */
+try{
+  // reactiveSystemTest();
+  // weakMapAndMapGarbageCollectionTest();
+  
+  reactiveSystemTest4BranchSwitch();
+} catch (e) {
+  console.log(e)
+}
+</script>
+</body>
+</html>
+
+```
+
+## 4.4 嵌套的effect与effect栈
+
+嵌套的effect, 顾名思义, 传给effect的副作用函数中还使用了effect
+
+那么什么场景会使用嵌套的effect呢? 很简单的一个场景就是父子组件, 
+这里我们不探讨具体场景, 就拿代码来说, 传给effect的副作用函数中还使用了effect这种情况是存在的, 
+再考虑是否有兼容的必要才会考虑是否需要支持, 很显然vue3中的某个computed可以中的代码可以包含另外一个computed, 所以当然是有必要支持的
+
+在测试区域添加新的测试方法, 执行后会发现我们现在的代码无法支持嵌套的effect
+```js
+function reactiveSystemTest4NestedEffect() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B',
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+
+  effect(() => {  // 副作用方法1
+    // 副作用方法执行
+    effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+
+    effect(() => {  // 副作用方法2
+      console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+    })
+
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)
+
+    effectCount++;
+  })
+
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('changed', originalData);
+  }, 1500)
+
+}
+```
+上述代码我们在副作用方法1也就是外层输出textA, 在副作用方法2也就是嵌套层输出textB, 并加上了一些输出标识文字
+
+很显然textA修改应该触发1, 触发1则会触发2, 因为2在1里面
+
+也就是说textA修改后, 我们的预期应该是输出textB与textA, 
+而textB修改后, 应该只输出textB不会输出textA
+
+然而实际输出如下
+```
+originalData.textA的副作用方法初始化辣！
+初次执行effect:  test B
+初次执行effect:  test A
+
+// 1.5s延迟后
+再次执行effect:  test B
+changed {textA: 'hahaha', textB: 'test B'}
+```
+
+奇怪, 我们修改textA为什么输出的却是textB的值?
+
+其实很简单, 就是内层的effect2覆盖了外层的effect1, 在初始化的时候, activeEffect变量存放的其实是下面的方法
+```js
+() => {  // 副作用方法1
+  // 副作用方法执行
+  effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+
+  effect(() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+  })
+
+  console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)
+
+  effectCount++;
+}
+```
 
 
+执行第一句
+* 代码: `effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');`
+* 输出: `originalData.textA的副作用方法初始化辣！`
 
+执行第二句
+* 代码: `effect(() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+  })`
+* 输出: `初次执行effect:  test B`
+* **问题就出在这**, 这时候, effect方法会将activeEffect存放的值修改为副作用方法2
+
+
+这时候activeEffect存放的值是副作用方法2, 也就是
+```js
+() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+}
+```
+执行第三句
+* 代码: `console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)`
+* 输出: `初次执行effect:  test A`
+* 影响: 此时字段textA对应的副作用set存放的其实是副作用方法2
+
+于是这就导致了当我们1.5秒后再去修改textA时, 执行的却是副作用方法2, 
+输出`再次执行effect:  test B`
+
+----
+
+那么如何解决呢? 其实很简单, 我们将activeEffect改为一个数组模拟栈, 遇到新副作用函数压入, 绑定关系后再将栈顶弹出即可
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+const effectStack = [];
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    effectStack.push(effectFn);
+    activeEffect = effectFn;
+    
+    // 触发真正的副作用函数
+    fn();
+    
+    // 弹出effectStack
+    effectStack.pop();
+    // 将activeEffect指向最上层的副作用函数
+    activeEffect = effectStack[effectStack.length - 1];
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+```
+
+**考虑为什么不在track方法中弹出effectStack?**
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+const effectStack = [];
+
+// get中追踪副作用方法
+function track(target, key) {
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  // 将副作用函数列表set添加到当前副作用函数的deps数组中
+  activeEffect.deps.push(dependsSet);
+  
+  // 弹出effectStack
+  effectStack.pop();
+  // 将activeEffect指向最上层的副作用函数
+  activeEffect = effectStack[effectStack.length - 1];
+}
+```
+
+压入与弹出应该是以副作用函数为维度, 而一个副作用函数可能会有变量的get触发, 当然不能在track中进行该操作
 
 
 # 5 js对象与proxy的工作原理
