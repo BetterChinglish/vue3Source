@@ -753,6 +753,8 @@ set中的trigger执行, 也会触发这个fn1方法执行,
 3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除 
 4. 执行副作用函数, 触发get, 触发track, 重新收集依赖
 
+接下来我们一条一条进行实现
+
 上述步骤中我们提到, **在真正的副作用函数执行前**, 这其实要求我们对副作用函数封装一层
 ```js
 
@@ -829,16 +831,112 @@ function cleanUp(effectFn) {
 }
 ```
 
+步骤4其实就是步骤1中effectFn的最后一句fn函数的执行
+4. 执行副作用函数, 触发get, 触发track, 重新收集依赖
+
+----
+
+
+其实到这里还有点问题, 问题发生在步骤3中
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除
+
+trigger中, 我们会去遍历set执行副作用, 例如某次遍历, 我们会在最终副作用fn方法执行前删除set中的effectFn, 
+然而删除后, 又会立马触发fn执行, 则立马触发get, 触发track, 重新收集依赖, 导致又将effectFn加回set中
+
+这相当于我们将set中某个元素删除后又将其添加到set中
+```js
+const fn1 = () => {console.log(1);}
+const fn2 = () => {console.log(2);}
+const fn3 = () => {console.log(3);}
+const fn4 = () => {console.log(4);}
+
+const s = new Set([fn1, fn2, fn3, fn4])
+s.forEach(fn => {
+  s.delete(fn);
+  fn();
+  
+  // do something else
+  // ...
+  
+  s.add(fn);
+})
+```
+这会造成代码无限循环执行, 解决方法很简单, 复制出一个set进行执行
+```js
+const fn1 = () => {console.log(1);}
+const fn2 = () => {console.log(2);}
+const fn3 = () => {console.log(3);}
+const fn4 = () => {console.log(4);}
+
+const s = new Set([fn1, fn2, fn3, fn4])
+const setToRun = new Set(s);
+
+setToRun.forEach(fn => {
+  s.delete(fn);
+  fn();
+  
+  // do something else
+  // ...
+  
+  s.add(fn);
+})
+```
+
+即需要将trigger方法修改成如下所示代码
+```js
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  // 新增代码
+  const effectsSetToRun = new Set(dependsSet);
+  effectsSetToRun.forEach(fn => fn());
+  // 删除代码
+  // dependsSet && dependsSet.forEach(fn => fn());
+}
+```
+
+最终输出结果比对
+
+```
+// 原输出结果
+originalData.textA的副作用方法初始化辣！
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: true, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'balabala'}
 
 
 
+// 优化后输出结果
+originalData.textA的副作用方法初始化辣！
 
+originalData.textA的副作用方法又执行辣！
+after change {ok: true, textA: 'hahaha'}
 
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'hahaha'}
 
+after change {ok: false, textA: 'balabala'}
+```
 
-
-
-
+可见第三个settimeout中修改textA并不会再次执行effect中放入的匿名函数
 
 
 

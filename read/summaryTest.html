@@ -94,7 +94,8 @@ function trigger(target, key) {
   if(!dependsSet) {
     return;
   }
-  dependsSet && dependsSet.forEach(fn => fn());
+  const effectsSetToRun = new Set(dependsSet);
+  effectsSetToRun.forEach(fn => fn());
 }
 
 /* 测试相关代码区域 */
