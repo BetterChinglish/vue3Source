@@ -181,6 +181,7 @@ new: 2 4 8
 我们创建一个与old一样长的数组并将元素初始化为-1, 且这个数组用来记录old中第n个元素应该要移动到哪个位置
 
 ```js
+/* 这部分代码没有实际运行验证，仅作为原理的理解 */
 // oldList与newList即为前面提到的新老节点数组, 我这里只简单示范, 不做具体的赋值, 了解原理即可
 const oldList = []
 const newList = []
@@ -196,6 +197,53 @@ newList.forEach((node, index) => {
   nodeNewPlaceMap[node.key] = index;
 })
 
-
+// 遍历旧节点数组，判断旧节点数组上的每个元素应该移动到哪个位置
+oldList.forEach((item, index) => {
+  const oldNodeKey = item.key;
+  const newIndex = nodeNewPlaceMap[oldNodeKey];
+  source[index] = newIndex;
+})
 
 ```
+
+此时，对于：
+```
+old: 4 2 8 
+new: 2 4 8
+```
+我们得到的source数组为：
+```
+[1, 0, 2]
+```
+
+这个数组揭示了从old的第i个元素应该移动到第source[i]的位置就可以得到new
+
+到这里，问题就变成了，如何移动最少次
+
+vue使用了最长递增子序列(LIS)算法来解决这个问题，其核心思想是找到一个最长的递增子序列，递增是为了保证数组有序
+
+这样我们只需要移动其他元素即可
+
+例如：
+```
+old: 4 2 8 
+new: 2 4 8
+source = [1, 0, 2]
+```
+
+我们可以得到source数组的最长递增子序列为[0, 2] 或者 [1, 2]
+我们使用[0, 2]
+
+那么source中只需要移动1，将1移动到0与2之间，问题解决
+
+LIS算法可以自行从网上找
+
+## 其他
+vue设计中的快速diff的少的补上，事实上并不是如同我这般忽略，而是与求source中同步解决，也就是没有忽略直接求source
+
+这样遇到少的补上的元素，求source时直接跳过，求完后，仍为-1的元素代表了需要补上的
+
+这里只是为了理解的方便以忽略的形式讲解
+
+
+
