@@ -797,6 +797,8 @@ function effect(fn) {
 ```js
 // get中追踪副作用方法
 function track(target, key) {
+  if(!activeEffect) return;
+  
   // 找到当前对象target对应的map
   let dependsMap = globalDependsMap.get(target);
   // 没有则为该对象创建
@@ -1005,6 +1007,7 @@ function toProxy(obj) {
 }
 // get中追踪副作用方法
 function track(target, key) {
+  if(!activeEffect) return;
   // 找到当前对象target对应的map
   let dependsMap = globalDependsMap.get(target);
   // 没有则为该对象创建
@@ -1323,6 +1326,136 @@ function track(target, key) {
 ```
 
 压入与弹出应该是以副作用函数为维度, 而一个副作用函数可能会有变量的get触发, 当然不能在track中进行该操作
+
+## 4.5 避免无限递归循环
+
+如果在一句话中既读取某个变量又修改了这个变量, 那么就会造成无限递归循环
+
+```js
+effect(() => {
+  obj.num = obj.num + 1;
+});
+```
+
+不难理解，读取时触发track，num属性对应set中增加这个副作用函数，随后立马又对num赋值，即触发trigger
+
+这会导致无限循环执行
+```js
+function reactiveSystemTest4AccessAndAssignmentRecursion() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  effect(() => {  // 副作用方法1
+    proxyObj.num = proxyObj.num + 1;
+    console.log('副作用方法执行')
+  })
+
+}
+```
+输出如下: 栈内存溢出
+```
+RangeError: Maximum call stack size exceeded
+```
+
+解决方案？很简单，trigger的时候判断一下当前执行的副作用是不是当前activeEffect，如果是则不执行
+
+```js
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  const effectsSetToRun = new Set();
+  
+  // 如果触发的副作用方法与当前activeEffect相同, 则不加入执行set
+  dependsSet && dependsSet.forEach(effectFn => {
+    if(effectFn !== activeEffect) {
+      effectsSetToRun.add(effectFn);
+    }
+  })
+  
+  effectsSetToRun.forEach(fn => fn());
+}
+```
+
+修改后刚才的测试方法输出如下
+```
+副作用方法执行
+```
+
+
+## 4.6 调度执行
+执行如下测试方法
+```js
+function reactiveSystemTest4Dispatch() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  effect(() => {  // 副作用方法1
+    console.log(proxyObj.num);
+  })
+
+  proxyObj.num++;
+
+  console.log('结束');
+}
+```
+
+很显然此时的输出为
+```
+1
+2
+结束
+```
+
+如若想要将副作用执行放到下一个事件循环中, 那么我们需要支持副作用方法的**调度**
+
+思路就是给effect方法第二个入参，可以让用户传入一些我们规定好的配置项
+
+```js
+function effect(fn, options = {}) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    effectStack.push(effectFn);
+    activeEffect = effectFn;
+    // 触发真正的副作用函数
+    fn();
+    effectStack.pop();
+    activeEffect = effectStack[effectStack.length - 1];
+  }
+  
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+
+  // 用户定义的options挂在到副作用方法上
+  effectFn.options = options;
+
+  effectFn();
+}
+
+```
 
 
 # 5 js对象与proxy的工作原理

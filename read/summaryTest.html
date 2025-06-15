@@ -16,7 +16,7 @@ let activeEffect;
 const effectStack = [];
 
 // 实现一个方法捕获副作用函数
-function effect(fn) {
+function effect(fn, options) {
   const effectFn = () => {
     // 清除副作用函数的逻辑
     cleanUp(effectFn);
@@ -29,8 +29,13 @@ function effect(fn) {
     effectStack.pop();
     activeEffect = effectStack[effectStack.length - 1];
   }
+
   // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
   effectFn.deps = [];
+
+  // 用户定义的options挂在到副作用方法上
+  effectFn.options = options;
+
   effectFn();
 }
 
@@ -65,6 +70,7 @@ function toProxy(obj) {
 }
 // get中追踪副作用方法
 function track(target, key) {
+  if(!activeEffect) return;
   // 找到当前对象target对应的map
   let dependsMap = globalDependsMap.get(target);
   // 没有则为该对象创建
@@ -97,7 +103,15 @@ function trigger(target, key) {
   if(!dependsSet) {
     return;
   }
-  const effectsSetToRun = new Set(dependsSet);
+  const effectsSetToRun = new Set();
+
+  // 如果触发的副作用方法与当前activeEffect相同, 则不加入执行set
+  dependsSet && dependsSet.forEach(effectFn => {
+    if(effectFn !== activeEffect) {
+      effectsSetToRun.add(effectFn);
+    }
+  })
+
   effectsSetToRun.forEach(fn => fn());
 }
 
@@ -155,7 +169,7 @@ function weakMapAndMapGarbageCollectionTest() {
   }, 3000)
 }
 
-
+// 分支切换测试
 function reactiveSystemTest4BranchSwitch() {
   // 原始数据
   const originalData = {
@@ -194,7 +208,7 @@ function reactiveSystemTest4BranchSwitch() {
   }, 3000)
 }
 
-
+// effect方法嵌套测试
 function reactiveSystemTest4NestedEffect() {
   // 原始数据
   const originalData = {
@@ -229,13 +243,56 @@ function reactiveSystemTest4NestedEffect() {
 
 }
 
+
+function reactiveSystemTest4AccessAndAssignmentRecursion() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+
+  effect(() => {  // 副作用方法1
+    proxyObj.num = proxyObj.num + 1;
+    console.log('副作用方法执行')
+  })
+
+}
+
+function reactiveSystemTest4Dispatch() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  effect(() => {  // 副作用方法1
+    console.log(proxyObj.num);
+  })
+
+  proxyObj.num++;
+
+  console.log('结束');
+}
+
+
 /* 测试代码执行区域 */
 try{
   // reactiveSystemTest();
   // weakMapAndMapGarbageCollectionTest();
   // reactiveSystemTest4BranchSwitch();
 
-  reactiveSystemTest4NestedEffect();
+  // reactiveSystemTest4NestedEffect();
+
+  // reactiveSystemTest4AccessAndAssignmentRecursion();
+
+  reactiveSystemTest4Dispatch();
 } catch (e) {
   console.log(e)
 }
