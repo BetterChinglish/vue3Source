@@ -37,10 +37,12 @@ const proxyObj = new Proxy(originalData, {
     return target(key);
   },
   set(target, key, newVal) {
-    // 触发副作用函数重新执行
-    bucket.forEach(cb => cb())
     // set实现
     target[key] = newVal;
+
+    // 触发副作用函数重新执行
+    bucket.forEach(cb => cb())
+    
     // 返回true标识操作成功
     return true;
   }
