@@ -28,6 +28,8 @@ packages:
   - "packages/*"
 ```
 
+记得在根目录下新建packages目录
+
 # tsconfig
 根目录新建tsconfig.json
 ```
@@ -75,9 +77,8 @@ packages:
 
 # 包
 新建包结构如图所示, shared包也如此新建文件:
+
 ![img.png](markdownImages/img.png)
-
-
 
 其中reactivity中的package.json内容如下
 ```
@@ -103,6 +104,7 @@ packages:
 ```
 
 shared中的package.json内容如下
+
 ```
 {
   "name": "@vue/shared",
