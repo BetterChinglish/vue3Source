@@ -147,3 +147,16 @@ pnpm install @vue/shared -w --filter @vue/reactivity
 
 也就是说安装packages下的@vue/shared到packages下的@vue/reactivity中
 ![img.png](markdownImages/img_1.png)
+
+
+# 开发环境打包脚本
+根目录下新建scripts目录, 新建dev.js
+
+具体打包脚本代码请看[源码]('./scripts/dev.js'), 其中注释已经非常详细了
+
+根目录package.json添加脚本
+```
+  "scripts": {
+    "dev": "node scripts/dev.js reactivity -f esm"
+  },
+```
