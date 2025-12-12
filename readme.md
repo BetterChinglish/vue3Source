@@ -160,3 +160,4 @@ pnpm install @vue/shared -w --filter @vue/reactivity
     "dev": "node scripts/dev.js reactivity -f esm"
   },
 ```
+上述代码表示运行scripts/dev.js脚本, 传入参数为 打reactivity包, 打包格式为esm
