@@ -41,7 +41,7 @@ const entry = resolve(__dirname, `../packages/${target}/src/index.ts`);
 const pkg = require(`../packages/${target}/package.json`);
 
 
-// 根据需要进行打包
+// 根据需要进行打包, 当前开发环境使用esbuild进行打包
 esbuild.context({
   // 入口
   entryPoints: [entry],
