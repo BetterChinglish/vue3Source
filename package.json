@@ -18,6 +18,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@vue/shared": "^3.5.25"
+    "@vue/shared": "^3.5.25",
+    "vue": "^3.5.25"
   }
 }
