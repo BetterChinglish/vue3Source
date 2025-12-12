@@ -1,13 +1,3 @@
-# 拍平
-npm会将下载的依赖拍平放入node_modules下, 而pnpm不会
-
-新建一个.npmrc文件, 添加如下配置即可自动拍平
-```
-shamefully-hoist=true
-```
-
-能复用的就拍平, 无法复用的就不拍平
-
 # 安装pnpm
 ```bash
 npm i -g pnpm
@@ -18,6 +8,16 @@ npm i -g pnpm
 ```bash
 pnpm init
 ```
+
+# 拍平
+npm会将下载的依赖拍平放入node_modules下, 而pnpm不会
+
+新建一个.npmrc文件, 添加如下配置即可自动拍平
+```
+shamefully-hoist=true
+```
+
+能复用的就拍平, 无法复用的就不拍平
 
 # pnpm-workspace.yaml
 根目录新建pnpm-workspace.yaml
