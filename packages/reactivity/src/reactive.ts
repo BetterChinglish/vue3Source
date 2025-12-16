@@ -38,7 +38,8 @@ function createReactiveObject(target) {
     return reactiveMap.get(target);
   }
 
-  // 防止代理一个proxy对象
+  // 防止代理一个被vue reactive包装过的proxy对象
+  // 这里并非在代理对象上新增了一个属性，而是拦截了一个属性的get操作
   if(target[ReactiveFlags.IS_REACTIVE]) {
     return target;
   }
