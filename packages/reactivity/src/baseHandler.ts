@@ -1,3 +1,5 @@
+import { activeEffect, track } from "@vue/reactivity";
+
 export enum ReactiveFlags {
   IS_REACTIVE = '__v_isReactive'
 }
@@ -7,6 +9,9 @@ export const mutableHandlers: ProxyHandler<any> = {
     if(key === ReactiveFlags.IS_REACTIVE) {
       return true;
     }
+
+    track(target, key)
+    console.log(activeEffect, key);
 
     // 响应属性与refect映射
     return Reflect.get(target, key, receiver);
