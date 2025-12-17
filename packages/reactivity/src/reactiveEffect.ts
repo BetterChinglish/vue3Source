@@ -34,8 +34,6 @@ export function track(target, key) {
     }
 
     trackEffect(activeEffect, deps);
-
-    console.log(targetMap)
   }
 }
 
@@ -56,9 +54,6 @@ export function trigger(target, key, value, oldValue) {
   if(deps) {
     triggerEffects(deps)
   }
-
-
-  console.log(target, key, targetMap)
 }
 
 

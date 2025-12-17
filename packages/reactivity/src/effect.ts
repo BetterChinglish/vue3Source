@@ -11,6 +11,11 @@ export function effect(fn, options?) {
   _effect.run();
 }
 
+function preCleanEffect(effect) {
+  effect._depsLength = 0;
+
+  effect._trackId++;
+}
 
 export let activeEffect;
 
@@ -41,6 +46,10 @@ class ReactiveEffect {
     try {
       activeEffect = this;
 
+      // 收集依赖前将上一次的清空
+      preCleanEffect(this);
+
+      // 依赖手机：执行fn方法，触发对象的get操作进行依赖收集
       return this.fn();
     } finally {
       activeEffect = lastEffect;
@@ -48,9 +57,24 @@ class ReactiveEffect {
   }
 }
 
-export function trackEffect(effect, dep) {
-  dep.set(effect, effect._trackId);
-  effect.deps[effect._depsLength++] = dep;
+export function trackEffect(effect, deps) {
+  // 首次进来时deps中还没有东西
+  console.log(effect._trackId, deps.get(effect));
+  if(deps.get(effect) !== effect._trackId) {
+    deps.set(effect, effect._trackId);
+
+    // let oldDep = effect.deps[effect._depsLength];
+    //
+    // if(oldDep !== deps) {
+    //   if(oldDep) {
+    //
+    //   }
+    //   effect.deps[effect._depsLength++] = deps;
+    // }
+
+  }
+  // dep.set(effect, effect._trackId);
+  // effect.deps[effect._depsLength++] = dep;
 }
 
 export function triggerEffects(deps) {
