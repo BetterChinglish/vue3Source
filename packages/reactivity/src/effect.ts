@@ -17,6 +17,13 @@ function preCleanEffect(effect) {
   effect._trackId++;
 }
 
+function cleanDepEffect(dep, effect) {
+  dep.delete(effect);
+  if(dep.size === 0) {
+    dep.cleanup();
+  }
+}
+
 export let activeEffect;
 
 class ReactiveEffect {
@@ -59,22 +66,32 @@ class ReactiveEffect {
 
 export function trackEffect(effect, deps) {
   // 首次进来时deps中还没有东西
-  console.log(effect._trackId, deps.get(effect));
+  // effect.run重新运行时，effect._trackId会+1，表示这是一次新的收集，但是如果运行的方法多次访问同一个属性，trackId不会有变换
+  // 也就是说trackId表示的是某次收集过程，一个过程可能多次访问同一个属性即effect.fn中的运行可能会多次访问同一个属性
   if(deps.get(effect) !== effect._trackId) {
     deps.set(effect, effect._trackId);
 
-    // let oldDep = effect.deps[effect._depsLength];
-    //
-    // if(oldDep !== deps) {
-    //   if(oldDep) {
-    //
-    //   }
-    //   effect.deps[effect._depsLength++] = deps;
-    // }
+    // 当effect.run重新运行会走到preCleanEffect方法将_depsLength置为0
+    // effect.fn不会改变,则依赖收集的顺序不会改变,即fn中依赖哪些属性的顺序不会变化, 除非遇到条件判断等动态依赖
+    let oldDep = effect.deps[effect._depsLength];
+
+    // 如果依赖不改变,即fn中访问的属性不变,则deps仍是原来属性的deps
+    // 如果改变, oldDep !== deps, 则说明fn方法中遇到了条件判断
+    // 例如person.flag ? person.name : person.age
+    // 如果flag由true变为false,则依赖顺序为 [flag对应的deps, name对应的deps] 变为 [flag对应的deps, age对应的deps]
+    if(oldDep !== deps) {
+      if(oldDep) {
+        // 有老的, 需要删除掉老的里面的依赖,注意oldDep是一个map对象,存放某个对象的某个属性的所以依赖,我们只需要删除当前effect即可
+        cleanDepEffect(oldDep, effect)
+      }
+      // 新的覆盖
+      effect.deps[effect._depsLength++] = deps;
+    } else {
+      // 依赖顺序无变化, 继续使用老的deps, ++跳过当前
+      effect._depsLength++;
+    }
 
   }
-  // dep.set(effect, effect._trackId);
-  // effect.deps[effect._depsLength++] = dep;
 }
 
 export function triggerEffects(deps) {

@@ -21,11 +21,15 @@
     })
 
     effect(() => {
-      app.innerHTML = person.name + person.name
+      console.log('run')
+      app.innerHTML = person.flag ? person.name : person.age;
     })
 
     setTimeout(() => {
       person.flag = false;
+      setTimeout(() => {
+        person.name = 'wanger'
+      })
     }, 1000)
 
   </script>
