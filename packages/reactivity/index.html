@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+  <h3>基本响应式</h3>
+  <div id="app"></div>
+
+  <h3>分支切换</h3>
+  <div class="app2"></div>
+
+  <script type="module">
+    // import { reactive, effect } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
+    import { reactive, effect } from "./dist/reactivity.js";
+
+    const app2 = document.querySelector(".app2");
+    const person2 = reactive({
+      name: 'lisi',
+      age: 20,
+      flag: true
+    })
+
+    effect(() => {
+      if (person2.flag) {
+        app2.innerHTML = `name: ${person2.name}, age: ${person2.age}`;
+      } else {
+        // 当flag为false时，不再访问name和age属性，需要删除对name和age的依赖收集
+        app2.innerHTML = `flag is false`;
+      }
+    })
+
+    setTimeout(() => {
+      person2.flag = false;
+    }, 1000)
+
+
+    /* 基本响应式*/
+    const person = reactive({
+      name: 'zhangsan',
+      age: 18
+    })
+
+    const app = document.getElementById("app");
+    effect(() => {
+      app.innerHTML = `name: ${person.name}, age: ${person.age}`;
+    })
+
+    setTimeout(() => {
+      person.age++;
+    }, 1000)
+  </script>
+</body>
+</html>

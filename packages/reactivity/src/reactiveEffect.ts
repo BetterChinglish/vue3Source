@@ -58,13 +58,7 @@ export function trigger(target, key, value, oldValue) {
   }
 
 
-
-
-
-
-
-
-
+  console.log(target, key, targetMap)
 }
 
 
