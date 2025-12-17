@@ -24,6 +24,23 @@ function cleanDepEffect(dep, effect) {
   }
 }
 
+function postCleanEffect(effect) {
+  const usefulLen = effect._depsLength;
+  const totalLen = effect.deps.length;
+
+  // 如果当前收集下来的依赖数量比之前的依赖数量多或者相等，则不需要清理
+  if(usefulLen >= totalLen) {
+    return;
+  }
+
+  // 多余的依赖需要清理掉
+  for(let i = usefulLen; i < totalLen; i++) {
+    const dep = effect.deps[i];
+    cleanDepEffect(dep, effect);
+  }
+  effect.deps.length = usefulLen;
+}
+
 export let activeEffect;
 
 class ReactiveEffect {
@@ -59,6 +76,11 @@ class ReactiveEffect {
       // 依赖手机：执行fn方法，触发对象的get操作进行依赖收集
       return this.fn();
     } finally {
+      // 清理多余的依赖, 当run重新运行重新收集依赖, 可能依赖会变少
+      // 例如: fn中使用了如下代码: person.flag ? person.name + ' ' + person.age: person.name
+      // 如果flag由true变为false, 则age不再是依赖, 需要清理掉
+      postCleanEffect(this);
+
       activeEffect = lastEffect;
     }
   }
