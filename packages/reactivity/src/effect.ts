@@ -9,6 +9,20 @@ export function effect(fn, options?) {
   });
   // 默认需要执行一次fn
   _effect.run();
+
+  // 如果用户传入了options，则进行合并
+  if(options) {
+    Object.assign(_effect, options);
+  }
+
+  // 将run方法绑定到_effect实例上
+  const runner = _effect.run.bind(_effect);
+
+  // 再给runner挂载一个effect属性，指向当前的_effect实例
+  runner.effect = _effect;
+
+  // 将runner方法返回出去，方便用户手动调用
+  return runner;
 }
 
 function preCleanEffect(effect) {

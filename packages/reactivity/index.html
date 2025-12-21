@@ -20,15 +20,23 @@
       flag: true
     })
 
-    effect(() => {
+    const runner = effect(() => {
       console.log('run')
       app.innerHTML = person.flag ? person.name : person.age;
+    }, {
+      scheduler: () => {
+        console.log('myself fn');
+        runner();
+      }
     })
 
     setTimeout(() => {
       person.flag = false;
       setTimeout(() => {
-        person.name = 'wanger'
+        // 更新俩属性，会触发两个属性的set，而两个触发都会去触发trigger，导致副作用fn执行两次
+        // 后续优化可以在scheduler中进行批处理
+        person.name = 'wanger';
+        person.age++;
       })
     }, 1000)
 
