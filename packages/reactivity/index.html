@@ -10,22 +10,42 @@
 <body>
   <div id="app"></div>
   <script type="module">
-    // import { reactive, effect, ref } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
-    import { reactive, effect, ref } from "./dist/reactivity.js";
+    // import {
+    //   reactive,
+    //   effect,
+    //   ref,
+    //   toRef,
+    //   toRefs
+    // } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
+    import {
+      reactive,
+      effect,
+      ref,
+      toRef,
+      toRefs,
+      proxyRefs
+    } from "./dist/reactivity.js";
 
     const app = document.querySelector("#app");
 
-    const flag = ref(true);
+    let state = reactive({
+      count: 0,
+      nested: {
+        foo: "bar"
+      }
+    });
 
-    // 进入effect，收集age依赖，当age改变又触发fn，导致无限循环
+    const obj = toRefs(state);
+
+    const proxy = proxyRefs({...obj})
+    console.log(proxy.count)
+    proxy.count++;
+    console.log(proxy.count)
+    console.log(obj)
+    console.log(state)
     effect(() => {
-      app.innerHTML = flag.value ? "对对对" : "错错错";
     })
-    console.log(flag.value)
 
-    setTimeout(() => {
-      flag.value = !flag.value;
-    }, 1000)
 
   </script>
 </body>
