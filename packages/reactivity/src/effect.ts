@@ -68,6 +68,8 @@ class ReactiveEffect {
   deps = [];
   _depsLength = 0;
 
+  _running = 0
+
   constructor(public fn, public scheduler?) {
 
   }
@@ -87,9 +89,12 @@ class ReactiveEffect {
       // 收集依赖前将上一次的清空
       preCleanEffect(this);
 
+      this._running++;
+
       // 依赖手机：执行fn方法，触发对象的get操作进行依赖收集
       return this.fn();
     } finally {
+      this._running--;
       // 清理多余的依赖, 当run重新运行重新收集依赖, 可能依赖会变少
       // 例如: fn中使用了如下代码: person.flag ? person.name + ' ' + person.age: person.name
       // 如果flag由true变为false, 则age不再是依赖, 需要清理掉
@@ -133,7 +138,11 @@ export function trackEffect(effect, deps) {
 export function triggerEffects(deps) {
   for(const effect of deps.keys()) {
     if(effect.scheduler) {
-      effect.scheduler();
+
+      // 为0说明没有执行，则执行，不为零
+      if(!effect._running) {
+        effect.scheduler();
+      }
     }
   }
 
