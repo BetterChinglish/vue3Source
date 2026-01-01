@@ -10,29 +10,21 @@
 <body>
   <div id="app"></div>
   <script type="module">
-    // import { reactive, effect } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
-    import { reactive, effect } from "./dist/reactivity.js";
+    // import { reactive, effect, ref } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
+    import { reactive, effect, ref } from "./dist/reactivity.js";
 
     const app = document.querySelector("#app");
-    const person = reactive({
-      name: 'lisi',
-      age: 20,
-      flag: true
-    })
+
+    const flag = ref(true);
 
     // 进入effect，收集age依赖，当age改变又触发fn，导致无限循环
-    const runner = effect(() => {
-      app.innerHTML = person.age;
-      person.age = person.age + 1;
-    }, {
-      scheduler: () => {
-        console.log('myself fn');
-        runner();
-      }
+    effect(() => {
+      app.innerHTML = flag.value ? "对对对" : "错错错";
     })
+    console.log(flag.value)
 
     setTimeout(() => {
-
+      flag.value = !flag.value;
     }, 1000)
 
   </script>
