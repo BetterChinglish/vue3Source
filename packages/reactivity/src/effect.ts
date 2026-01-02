@@ -1,4 +1,4 @@
-
+import { DirtyLevels } from "./constants";
 
 
 export function effect(fn, options?) {
@@ -57,7 +57,7 @@ function postCleanEffect(effect) {
 
 export let activeEffect;
 
-class ReactiveEffect {
+export class ReactiveEffect {
 
   // 标记当前effect是否需要响应式
   public active = true;
@@ -68,13 +68,24 @@ class ReactiveEffect {
   deps = [];
   _depsLength = 0;
 
-  _running = 0
+  _running = 0;
+
+  _dirtyLevel = DirtyLevels.Dirty;
 
   constructor(public fn, public scheduler?) {
 
   }
 
+  // 获取与设置计算属性是否脏值
+  public get dirty() {
+    return this._dirtyLevel === DirtyLevels.Dirty;
+  }
+  public set dirty(value) {
+    this._dirtyLevel = value ? DirtyLevels.Dirty : DirtyLevels.NoDirty;
+  }
+
   run() {
+    this._dirtyLevel = DirtyLevels.NoDirty;
 
     if(!this.active) {
       return this.fn();
@@ -137,6 +148,10 @@ export function trackEffect(effect, deps) {
 
 export function triggerEffects(deps) {
   for(const effect of deps.keys()) {
+    if(effect._dirtyLevel < DirtyLevels.Dirty) {
+      effect._dirtyLevel = DirtyLevels.Dirty;
+    }
+
     if(effect.scheduler) {
 
       // 为0说明没有执行，则执行，不为零

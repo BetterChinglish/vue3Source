@@ -10,22 +10,23 @@
 <body>
   <div id="app"></div>
   <script type="module">
-    import {
-      reactive,
-      effect,
-      ref,
-      toRef,
-      toRefs,
-      computed
-    } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
     // import {
     //   reactive,
     //   effect,
     //   ref,
     //   toRef,
     //   toRefs,
-    //   proxyRefs
-    // } from "./dist/reactivity.js";
+    //   computed
+    // } from "../../../node_modules/@vue/reactivity/dist/reactivity.esm-browser.js";
+    import {
+      reactive,
+      effect,
+      ref,
+      toRef,
+      toRefs,
+      proxyRefs,
+      computed
+    } from "./dist/reactivity.js";
 
     const app = document.querySelector("#app");
 
@@ -34,22 +35,22 @@
       name: 'zhangsan'
     });
 
-    const aliasName = computed(() => {
-      console.log('计算属性被调用了');
-      return 'hello ' + state.name;
-    });
-
-    // 依赖没有更改的情况下，多次取值只会执行一次计算
-    console.log(aliasName.value);
-    console.log(aliasName.value);
-    console.log(aliasName.value);
-    console.log(aliasName.value);
-
-    effect(() => {
-      console.log(aliasName.value);
-      console.log(aliasName.value);
-      console.log(aliasName.value);
-    })
+    // const aliasName = computed(() => {
+    //   console.log('计算属性被调用了');
+    //   return 'hello ' + state.name;
+    // });
+    //
+    // // 依赖没有更改的情况下，多次取值只会执行一次计算
+    // console.log(aliasName.value);
+    // console.log(aliasName.value);
+    // console.log(aliasName.value);
+    // console.log(aliasName.value);
+    //
+    // effect(() => {
+    //   console.log(aliasName.value);
+    //   console.log(aliasName.value);
+    //   console.log(aliasName.value);
+    // })
 
     // 计算属性维护了一个dirty属性，默认true，运行一次计算逻辑后变为false
     // 当依赖的响应式数据发生变化时，会把dirty重新设置为true
@@ -69,11 +70,22 @@
       }
     })
 
-    console.log(sayHello.value);
-    state.name = 'lisi'
-    console.log(sayHello.value);
+    effect(() => {
+      console.log(sayHello.value);
+      console.log(sayHello.value);
+      console.log(sayHello.value);
+    });
 
-    sayHello.value = 'hello world';
+    effect(() => {
+      console.log('2: ' + sayHello.value);
+      console.log('2: ' + sayHello.value);
+      console.log('2: ' + sayHello.value);
+    });
+    console.log(sayHello.dep)
+
+    setTimeout(() => {
+      state.name = 'lisi'
+    }, 1000)
 
 
   </script>
