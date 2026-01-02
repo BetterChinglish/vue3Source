@@ -58,6 +58,23 @@
 
     // 计算属性具备收集能力，可以收集对应的effect，依赖的值变化后会触发effect重新执行
 
+    // computed的另外一种写法
+    const sayHello = computed({
+      get(oldValue) {
+        console.log('get old value: ', oldValue);
+        return 'hello ' + state.name;
+      },
+      set(newValue) {
+        console.log('set', newValue);
+      }
+    })
+
+    console.log(sayHello.value);
+    state.name = 'lisi'
+    console.log(sayHello.value);
+
+    sayHello.value = 'hello world';
+
 
   </script>
 </body>
