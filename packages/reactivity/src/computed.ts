@@ -54,9 +54,6 @@ export function computed(getterOrOptions) {
     setter = getterOrOptions.set;
   }
 
-  console.log(getter, setter);
-
-
   // 计算属性ref
   return new ComputedRefImpl(getter, setter);
 }
