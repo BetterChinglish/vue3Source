@@ -1,5 +1,5 @@
-import { ReactiveEffect } from "@vue/reactivity";
-import { isObject } from "@vue/shared";
+import { isReactive, isRef, ReactiveEffect } from "@vue/reactivity";
+import { isFunction, isObject } from "@vue/shared";
 
 
 export function watch(source, cb, options = {} as any) {
@@ -36,14 +36,23 @@ function traverse(source, depth, currentDepth = 0, seen = new Set()) {
 }
 
 function doWatch(source, cb, options) {
-  const { deep = true } = options;
+  const { deep = true, immediate } = options;
   // 如果deep则深度收集, 非deep只收集一层
   const reactiveGetter = (source) => {
     return traverse(source, deep === false ? 1 : undefined)
   }
-
-  // 使用reactiveEffect默认执行一次getter以收集依赖
-  let getter = () => reactiveGetter(source);
+  let getter;
+  if(isReactive(source)) {
+    // 使用reactiveEffect默认执行一次getter以收集依赖
+    getter = () => reactiveGetter(source);
+  }
+  // ref使用方法包装直接取值触发get
+  else if(isRef(source)) {
+    getter = () => source.value;
+  }
+  else if(isFunction(source)) {
+    getter = source;
+  }
 
   let oldValue;
 
@@ -59,5 +68,13 @@ function doWatch(source, cb, options) {
 
   const effect = new ReactiveEffect(getter, job)
 
-  oldValue = effect.run();
+  if(cb) {
+    if(immediate) {
+      job();
+    } else {
+      oldValue = effect.run();
+    }
+  } else {
+    // watchEffect
+  }
 }

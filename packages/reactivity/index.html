@@ -41,23 +41,37 @@
 
     const app = document.querySelector("#app");
 
-    // 计算属性
-    const state = reactive({
-      name: 'zhangsan',
-      job: {
-        name: 'kaifa'
-      }
-    });
+    try {
+      // 计算属性
+      const state = reactive({
+        name: 'zhangsan',
+        job: {
+          name: 'kaifa'
+        }
+      });
 
 
-    watch(state, (oldVal, newVal) => {
-      console.log('watch', oldVal, newVal);
-    }, {
-      deep: false
+      watch(state, (newVal, oldVal) => {
+        console.log('watch', newVal, oldVal);
+      }, {
+        deep: true,
+        immediate: true,
+      })
+
+      setTimeout(() => {
+        state.job.name = 'ceshi'
+      }, 2000)
+    } catch (e) {
+      console.log(e)
+    }
+
+    const name = ref('bob')
+    watch(name, (newV, oldV) => {
+      console.log('name change', newV, oldV);
     })
 
     setTimeout(() => {
-      state.job.name = 'ceshi'
+      name.value = 'alice'
     }, 2000)
 
 

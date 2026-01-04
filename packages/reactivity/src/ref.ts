@@ -105,3 +105,8 @@ export function proxyRefs(objectWithRef) {
     }
   })
 }
+
+
+export function isRef(data) {
+  return !!(data && data.__v_isRef);
+}
