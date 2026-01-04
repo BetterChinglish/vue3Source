@@ -7,6 +7,11 @@ export function watch(source, cb, options = {} as any) {
   return doWatch(source, cb, options);
 }
 
+
+export function watchEffect(source, options = {}) {
+  return doWatch(source, null, options);
+}
+
 // 仅触发get以收集依赖
 function traverse(source, depth, currentDepth = 0, seen = new Set()) {
   if(!isObject(source)) {
@@ -58,12 +63,18 @@ function doWatch(source, cb, options) {
 
   // 当watch的state发生改变会触发ReactiveEffect的schduler也就是这个job
   const job = () => {
-    // effect.run会拿到state的新值
-    const newValue = effect.run();
-    // 传给watch中用户设置的callback并执行该callback
-    cb(newValue, oldValue);
-    // 同时下一次的老值就是这一次的新值
-    oldValue = newValue;
+    if(cb) {
+      // effect.run会拿到state的新值
+      const newValue = effect.run();
+      // 传给watch中用户设置的callback并执行该callback
+      cb(newValue, oldValue);
+      // 同时下一次的老值就是这一次的新值
+      oldValue = newValue;
+    }
+    // watchEffect没有cb，直接执行effect.run触发副作用方法
+    else {
+      effect.run();
+    }
   }
 
   const effect = new ReactiveEffect(getter, job)
@@ -76,5 +87,6 @@ function doWatch(source, cb, options) {
     }
   } else {
     // watchEffect
+    effect.run();
   }
 }

@@ -25,7 +25,8 @@
     //   toRef,
     //   toRefs,
     //   computed,
-    //   watch
+    //   watch,
+    //   watchEffect
     // } from '../../../node_modules/vue/dist/vue.esm-browser.js'
 
     import {
@@ -36,43 +37,35 @@
       toRefs,
       proxyRefs,
       computed,
-      watch
+      watch,
+      watchEffect
     } from "./dist/reactivity.js";
 
     const app = document.querySelector("#app");
 
-    try {
-      // 计算属性
-      const state = reactive({
-        name: 'zhangsan',
-        job: {
-          name: 'kaifa'
-        }
-      });
+    // 计算属性
+    const state = reactive({
+      name: 'zhangsan',
+      age: 18,
+      job: {
+        name: 'kaifa'
+      }
+    });
 
+    // watch、watchEffect本质上其实就是effect，只不过最初vue源码effect这个api没有暴露出来
 
-      watch(state, (newVal, oldVal) => {
-        console.log('watch', newVal, oldVal);
-      }, {
-        deep: true,
-        immediate: true,
-      })
+    // watchEffect用于当依赖发生改变时，自动重新执行一次副作用函数
+    watchEffect(() => {
+      console.log(`${state.name} is ${state.age} years old, job is ${state.job.name}`);
+    }, {
 
-      setTimeout(() => {
-        state.job.name = 'ceshi'
-      }, 2000)
-    } catch (e) {
-      console.log(e)
-    }
-
-    const name = ref('bob')
-    watch(name, (newV, oldV) => {
-      console.log('name change', newV, oldV);
     })
 
     setTimeout(() => {
-      name.value = 'alice'
-    }, 2000)
+      state.age = 20;
+      state.job.name = 'sheji';
+    })
+
 
 
   </script>
