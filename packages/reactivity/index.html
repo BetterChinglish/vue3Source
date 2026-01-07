@@ -43,33 +43,28 @@
 
     const app = document.querySelector("#app");
 
-    // 计算属性
-    const state = reactive({
-      name: 'zhangsan',
-      age: 18,
-      job: {
-        name: 'kaifa'
-      }
-    });
+    const val = ref("");
 
-    // watch、watchEffect本质上其实就是effect，只不过最初vue源码effect这个api没有暴露出来
+    function getData(timer) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          resolve(timer)
+        }, timer)
+      })
+    }
 
-    // watchEffect用于当依赖发生改变时，自动重新执行一次副作用函数
-    const stopDescWatch =  watchEffect(() => {
-      console.log(`${state.name} is ${state.age} years old, job is ${state.job.name}`);
-    }, {
-
+    let timer = 3000;
+    watch(val, async () => {
+      timer -= 1000;
+      app.innerHTML = await getData( timer );
     })
 
+    // watch的callback被触发两次，一次2000，第二次1000，但是1000小于2000所以先执行
+    // 但实际上我们应该保留最后一次执行结果
     setTimeout(() => {
-      state.age = 20;
-      state.job.name = 'sheji';
+      val.value = 'change1'
+      val.value = 'change2'
     }, 1000)
-
-    setTimeout(() => {
-      stopDescWatch(); // 停止watchEffect监听
-      state.age = 22; // 不会触发watchEffect重新执行
-    }, 2000)
 
 
   </script>
