@@ -54,9 +54,20 @@
     }
 
     let timer = 3000;
+    let queue = [];
     watch(val, async () => {
+      let flag = true;
+      queue.forEach(fn => {
+        fn();
+      })
+      queue.push(() => flag = false);
       timer -= 1000;
-      app.innerHTML = await getData( timer );
+
+      const res = await getData( timer );
+      if(flag) {
+        app.innerHTML = res;
+      }
+
     })
 
     // watch的callback被触发两次，一次2000，第二次1000，但是1000小于2000所以先执行
