@@ -114,6 +114,14 @@ export class ReactiveEffect {
       activeEffect = lastEffect;
     }
   }
+
+  stop() {
+    if(this.active) {
+      this.active = false;
+      preCleanEffect(this);
+      postCleanEffect(this);
+    }
+  }
 }
 
 export function trackEffect(effect, deps) {

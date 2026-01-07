@@ -55,7 +55,7 @@
     // watch、watchEffect本质上其实就是effect，只不过最初vue源码effect这个api没有暴露出来
 
     // watchEffect用于当依赖发生改变时，自动重新执行一次副作用函数
-    watchEffect(() => {
+    const stopDescWatch =  watchEffect(() => {
       console.log(`${state.name} is ${state.age} years old, job is ${state.job.name}`);
     }, {
 
@@ -64,8 +64,12 @@
     setTimeout(() => {
       state.age = 20;
       state.job.name = 'sheji';
-    })
+    }, 1000)
 
+    setTimeout(() => {
+      stopDescWatch(); // 停止watchEffect监听
+      state.age = 22; // 不会触发watchEffect重新执行
+    }, 2000)
 
 
   </script>
