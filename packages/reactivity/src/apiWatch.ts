@@ -61,13 +61,24 @@ function doWatch(source, cb, options) {
 
   let oldValue;
 
+  let clean;
+  const onCleanup = (fn) => {
+    clean = () => {
+      fn();
+      clean = null;
+    }
+  }
+
   // 当watch的state发生改变会触发ReactiveEffect的schduler也就是这个job
   const job = () => {
     if(cb) {
       // effect.run会拿到state的新值
       const newValue = effect.run();
+      if(clean) {
+        clean();
+      }
       // 传给watch中用户设置的callback并执行该callback
-      cb(newValue, oldValue);
+      cb(newValue, oldValue, onCleanup);
       // 同时下一次的老值就是这一次的新值
       oldValue = newValue;
     }

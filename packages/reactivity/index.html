@@ -55,12 +55,16 @@
 
     let timer = 3000;
     let queue = [];
-    watch(val, async () => {
+    watch(val, async (newVal, oldVal, onCleanup) => {
       let flag = true;
-      queue.forEach(fn => {
-        fn();
+      // queue.forEach(fn => {
+      //   fn();
+      // })
+      // queue.push(() => flag = false);
+
+      onCleanup(() => {
+        flag = false;
       })
-      queue.push(() => flag = false);
       timer -= 1000;
 
       const res = await getData( timer );
