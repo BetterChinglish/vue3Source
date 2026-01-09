@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+  import {
+    createRenderer,
+    render,
+    h
+  } from '/node_modules/@vue/runtime-dom/dist/runtime-dom.esm-browser.js';
+
+  import { renderOptions } from './dist/runtime-dom.js'
+
+  // createRenderer：自己创建渲染器
+  // render 内置的渲染器
+
+
+  // @vue/runtime-dom:  提供dom api，针对浏览器，基于runtime-core
+  // @vue/runtime-core：跨平台，不关心外部如何渲染虚拟dom
+  // @vue/reactivity: 底层响应式
+
+
+  // type, propsOrChildren, children
+  // console.log(h)
+
+  let el = h('h1', {
+    style: {
+      color: 'red'
+    },
+    class: 'title',
+    onClick: () => {
+      console.log('click');
+    },
+    a: '123',
+  }, 'hello world')
+  console.log(el)
+
+  // render(el, app)
+
+  const myRenderer = createRenderer(renderOptions);
+  myRenderer.render(el, app);
+</script>
+
+</body>
+</html>

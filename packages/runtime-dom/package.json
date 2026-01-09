@@ -14,6 +14,7 @@
     ]
   },
   "dependencies": {
+    "@vue/runtime-core": "workspace:*",
     "@vue/shared": "workspace:*"
   }
 }
