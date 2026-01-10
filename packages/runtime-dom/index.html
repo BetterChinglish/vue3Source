@@ -11,12 +11,12 @@
 <div id="app"></div>
 <script type="module">
   import {
-    createRenderer,
-    render,
+    // createRenderer,
+    // render,
     h
   } from '/node_modules/@vue/runtime-dom/dist/runtime-dom.esm-browser.js';
 
-  import { renderOptions } from './dist/runtime-dom.js'
+  import { render } from './dist/runtime-dom.js'
 
   // createRenderer：自己创建渲染器
   // render 内置的渲染器
@@ -26,11 +26,7 @@
   // @vue/runtime-core：跨平台，不关心外部如何渲染虚拟dom
   // @vue/reactivity: 底层响应式
 
-
-  // type, propsOrChildren, children
-  // console.log(h)
-
-  let el = h('h1', {
+  let el1 = h('h1', {
     style: {
       color: 'red'
     },
@@ -39,13 +35,29 @@
       console.log('click');
     },
     a: '123',
+  }, [
+    h('span','hello span'),
+    h('div','hello div'),
+    h('p', {style: {color: 'blue'}}, 'hello p')
+  ])
+
+  let el2 = h('h1', {
+    style: {
+      color: 'green'
+    },
+    class: 'title',
+    onClick: () => {
+      console.log('click');
+    },
+    a: '123',
   }, 'hello world')
-  console.log(el)
 
-  // render(el, app)
+  render(el1, app);
 
-  const myRenderer = createRenderer(renderOptions);
-  myRenderer.render(el, app);
+  setTimeout(() => {
+    render(el2, app);
+  }, 2000);
+
 </script>
 
 </body>

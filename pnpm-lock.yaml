@@ -49,8 +49,8 @@ importers:
   packages/runtime-dom:
     dependencies:
       '@vue/runtime-core':
-        specifier: ^3.5.26
-        version: 3.5.26
+        specifier: workspace:*
+        version: link:../runtime-core
       '@vue/shared':
         specifier: workspace:*
         version: link:../shared
