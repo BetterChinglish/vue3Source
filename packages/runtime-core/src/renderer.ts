@@ -24,15 +24,15 @@ export function createRenderer(renderOptions) {
   }
   // 首次创建挂载
   const mountElement = (vnode, container) => {
+    
     const {
       type,
       children,
       props,
       shapeFlag,
-     } = vnode;
-    console.log(vnode,type);
+    } = vnode;
+    
     const el = hostCreateElement(type);
-    console.log(props);
     
     // 处理props
     if(props) {
