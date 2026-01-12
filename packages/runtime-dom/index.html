@@ -19,59 +19,17 @@
   import { 
     render,
     h
-   } from './dist/runtime-dom.js'
+  } from './dist/runtime-dom.js'
+
+  
+  render(h('h1', 'hello world'), app);
 
 
-  // h 方法
-  // h(type, props/children)
-  // h(type, props, children)
-  // h(type, props, children, children, children....)
-
-  // 1. 两个参数 第二个参数可能是属性, 也可能是虚拟节点
-  // 第二个参数是数组, 说明是多个子节点
-  // 第二个参数是对象, 说明是属性
-  // 第二个参数是字符串, 说明是文本节点
-  // let el1 = h('h1', ['aiy', '你好'])
-  // let el1 = h('h1', {style:{color:'red'}})
-  // let el1 = h('h1', 'hello world')
-  // let el1 = h('h1', h('span', 'hello world'))
-
-  // 2. 三个参数时
-  // 第一个参数是标签名
-  // 第二个参数必须是属性
   
 
-  // 3.超过三个参数
-  // 第一个参数是标签名
-  // 第二个参数必须是属性
-  // 第三个参数开始, 都是子节点
-  // let el1 = h('h1', {}, '哎哟', ['哎呀', '你好'], '我去')
-
-
-  // let el1 = h("div",{a:1})
-  // let el1 = h("div", h("span", "hello world"))
-  // let el1 = h("div", [h("a"), h("b")])
-  // let el1 = h("div", 'abc')
-
-  let el1 = h("div", { a: 1}, h('span', { style: { color: 'red' }},'hello world'), h('span', '你好'), h('span', '我好'))
-  console.log(el1);
-
-  let el2 = h('h1', {
-    style: {
-      color: 'green'
-    },
-    class: 'title',
-    onClick: () => {
-      console.log('click');
-    },
-    a: '123',
-  }, 'hello world')
-
-  render(el1, app);
-
-  // setTimeout(() => {
-  //   render(el2, app);
-  // }, 2000);
+  setTimeout(() => {
+    render(null, app);
+  }, 2000);
 
 </script>
 

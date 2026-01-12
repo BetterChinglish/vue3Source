@@ -1,4 +1,4 @@
-import { ShapeFlags } from "@vue/shared";
+import { ShapeFlags } from '@vue/shared';
 
 // 不关心api层面，可以跨平台
 export function createRenderer(renderOptions) {
@@ -13,7 +13,6 @@ export function createRenderer(renderOptions) {
     parentNode: hostParentNode,
     nextSibling: hostNextSibling,
     patchProp: hostPatchProp,
-
   } = renderOptions;
 
   const mountChildren = (children, container) => {
@@ -24,27 +23,23 @@ export function createRenderer(renderOptions) {
   }
   // 首次创建挂载
   const mountElement = (vnode, container) => {
-    
-    const {
-      type,
-      children,
-      props,
-      shapeFlag,
-    } = vnode;
-    
-    const el = hostCreateElement(type);
-    
+    const {type, children, props, shapeFlag} = vnode
+
+    const el = vnode.el = hostCreateElement(type)
+
     // 处理props
     if(props) {
-      for (const key in props) {
+      for(const key in props) {
         hostPatchProp(el, key, null, props[key]);
       }
     }
 
     // 处理子元素
-    if (shapeFlag & ShapeFlags.TEXT_CHILDREN) { // 子元素是文本节点
+    if(shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+      // 子元素是文本节点
       hostSetElementText(el, children);
-    } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) { // 子元素有多个
+    }else if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+      // 子元素有多个
       mountChildren(children, el);
     }
 
@@ -63,11 +58,22 @@ export function createRenderer(renderOptions) {
     if (n1 === null) {
       mountElement(n2, container);
     }
-
+  }
+  
+  const unmount = (vnode) => {
+    hostRemove(vnode.el);
   }
 
   // 多次调用render会进行虚拟节点的对比，然后再进行更新
   const render = (vnode, container) => {
+    if (vnode === null) {
+      // 说明是删除当前容器里的节点
+      if(container._vnode) {
+        unmount(container._vnode);
+      }
+      return
+    }
+
     // 第一次render时，container._vnode为null
     // 后续render时，container._vnode为上一次render的虚拟节点
     patch(container._vnode || null, vnode, container);
