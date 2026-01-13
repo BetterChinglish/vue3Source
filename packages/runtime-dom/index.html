@@ -21,14 +21,15 @@
     h
   } from './dist/runtime-dom.js'
 
-  
-  render(h('h1', 'hello world'), app);
+  const v1 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
+  const v2 = h('h1', { key: 'world', style: { color: 'red' }}, 'hello vue3');
+  render(v1, app);
 
 
-  
-
+  // 更新时，会对比v1和v2，然后只更新有变化的部分
+  // 但是如果并非同一个元素如h1变为div，则不会复用
   setTimeout(() => {
-    render(null, app);
+    render(v2, app);
   }, 2000);
 
 </script>

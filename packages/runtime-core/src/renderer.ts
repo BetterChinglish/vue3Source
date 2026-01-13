@@ -1,4 +1,5 @@
 import { ShapeFlags } from '@vue/shared';
+import { isSameVNode } from './createVNode';
 
 // 不关心api层面，可以跨平台
 export function createRenderer(renderOptions) {
@@ -46,32 +47,96 @@ export function createRenderer(renderOptions) {
     hostInsert(el, container)
   }
 
-  // 渲染与更新
-  const patch = (n1, n2, container) => {
-    // n1 旧节点
-    // n2 新节点
-    if(n1 === n2) {
-      return;
-    }
 
+  const processElement = (n1, n2, container) => {
     // 旧节点不存在，说明是新增节点
     if (n1 === null) {
       mountElement(n2, container);
     }
+    else {
+      patchElement(n1, n2, container);
+    }
   }
-  
+
+  const patchProps = (oldProps, newProps, el) => {
+    // hostPatchProp()
+    // 将老的属性中有新的属性进行更新
+    for(const key in newProps) {
+      hostPatchProp(el, key, oldProps[key], newProps[key]);
+    }
+
+    // 将旧的但是新的没有的属性删除
+    for(const key in oldProps) {
+      if(!(key in newProps)) {
+        hostPatchProp(el, key, oldProps[key], null);
+      }
+    }
+
+  }
+
+  const patchChildren = (n1, n2, container) => {
+
+  }
+
+  const patchElement = (n1, n2, container) => {
+    console.log('更新元素');
+    // 复用dom元素
+    let el = n2.el = n1.el;
+    // 比较属性和元素子节点
+    console.log(n1.props);
+    console.log(n2.props);
+    const oldProps = n1.props || {};
+    const newProps = n2.props || {};
+
+    // 更新属性
+
+    patchProps(oldProps, newProps, el);
+    patchChildren(n1, n2, container);
+
+  }
+
+  /**
+   * 渲染与更新
+   * @param n1 - 旧节点
+   * @param n2 - 新节点
+   * @param container - 容器元素
+   */
+  const patch = (n1, n2, container) => {
+    if(n1 === n2) {
+      return;
+    }
+
+    // 渲染过一次，需要查看上一次的节点和这次的节点是否相同，如果不同就卸载重新挂载
+    if(n1 && !isSameVNode(n1, n2)) {
+      console.log('不同')
+      unmount(n1);
+      // n1为null会重新执行mountElement
+      n1 = null;
+    }
+
+    processElement(n1, n2, container);
+  }
+
+  /**
+   * 卸载节点
+   * @param vnode - 要卸载的虚拟节点
+   */
   const unmount = (vnode) => {
     hostRemove(vnode.el);
   }
 
   // 多次调用render会进行虚拟节点的对比，然后再进行更新
+  /**
+   * 渲染函数
+   * @param vnode - 要渲染的虚拟节点
+   * @param container - 容器元素, 要渲染的节点会挂载到该容器元素下
+   */
   const render = (vnode, container) => {
     if (vnode === null) {
       // 说明是删除当前容器里的节点
       if(container._vnode) {
         unmount(container._vnode);
       }
-      return
     }
 
     // 第一次render时，container._vnode为null

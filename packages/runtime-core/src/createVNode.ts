@@ -4,6 +4,15 @@ export function isVNode(value) {
   return value.__v_isVNode === true;
 }
 
+/**
+ * 判断是否为相同的vnode
+ * @param n1 - 旧节点
+ * @param n2 - 新节点
+ * @returns {Boolean} 是否为相同的vnode
+ */
+export function isSameVNode(n1, n2): boolean {
+  return n1.type === n2.type && n1.key === n2.key;
+}
 
 export function createVNode(
   type,
