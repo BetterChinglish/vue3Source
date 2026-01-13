@@ -74,24 +74,114 @@ export function createRenderer(renderOptions) {
 
   }
 
-  const patchChildren = (n1, n2, container) => {
+  const unmountChildren = (children) => {
+    for(let i = 0; i < children.length; i++) {
+      const child = children[i];
+      unmount(child);
+    }
+  }
 
+  /*
+  * @param n1 旧节点
+  * @param n2 新节点
+  * @param container 容器元素
+  * */
+  const patchChildren = (n1, n2, el) => {
+    const c1 = n1.children;
+    const c2 = n2.children;
+
+    const prevShapeFlag = n1.shapeFlag;
+    const shapeFlag = n2.shapeFlag;
+    // 9种组合
+    /*
+    * 新      旧      操作
+    * 文本    数组    清空老节点，设置文本
+    * 文本    文本    设置新文本
+    * 文本    空      设置新文本
+    *
+    * 数组    数组    diff算法
+    * 数组    文本    清空文本，挂载新节点
+    * 数组    空      挂载新节点
+    *
+    * 空      文本    清空文本
+    * 空      数组    清空节点
+    * 空      空      不做处理
+    *
+    * */
+
+    if(shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+      console.log('新的是文本')
+    } else if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+      console.log('新的是数组')
+    } else {
+      console.log('新的是空')
+    }
+    if(prevShapeFlag & ShapeFlags.TEXT_CHILDREN) {
+      console.log('老的是文本')
+    } else if (prevShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+      console.log('老的是数组')
+    } else {
+      console.log('老的是空')
+    }
+
+    // if 新节点是文本
+    // 老的是数组 或 文本 或 空
+    if(shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+      const oldIsArray = prevShapeFlag & ShapeFlags.ARRAY_CHILDREN;
+      // 旧节点是数组, 需要全部卸载, 然后设置新文本
+      if(oldIsArray) {
+        unmountChildren(c1)
+      }
+      // 否则旧节点是文本或者空, 直接设置新文本
+
+      console.log('新的是文本，老的是文本或空')
+      if(c1 !== c2) {
+        hostSetElementText(el, c2);
+      }
+    }
+    // else 新的子节点是数组或空
+    // 老的是数组 或 文本 或 空
+    else {
+      // 老的是数组
+      // 新的是数组或空
+      if(prevShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+        // 新的是数组
+        // 老的是数组
+        if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+          // diff
+        }
+        // 新的是空
+        // 老的是数组 ---> 卸载老的
+        else{
+          unmountChildren(c1);
+        }
+      }
+      // 新的是数组或空
+      // 老的是文本或空
+      else {
+        // 老的是文本, 需要删除文本
+        if(prevShapeFlag & ShapeFlags.TEXT_CHILDREN) {
+          hostSetElementText(el, '');
+        }
+        // 新的是数组, 需要挂载新元素
+        if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+          mountChildren(c2, el);
+        }
+      }
+    }
   }
 
   const patchElement = (n1, n2, container) => {
-    console.log('更新元素');
     // 复用dom元素
     let el = n2.el = n1.el;
     // 比较属性和元素子节点
-    console.log(n1.props);
-    console.log(n2.props);
     const oldProps = n1.props || {};
     const newProps = n2.props || {};
 
     // 更新属性
 
     patchProps(oldProps, newProps, el);
-    patchChildren(n1, n2, container);
+    patchChildren(n1, n2, el);
 
   }
 
@@ -108,7 +198,6 @@ export function createRenderer(renderOptions) {
 
     // 渲染过一次，需要查看上一次的节点和这次的节点是否相同，如果不同就卸载重新挂载
     if(n1 && !isSameVNode(n1, n2)) {
-      console.log('不同')
       unmount(n1);
       // n1为null会重新执行mountElement
       n1 = null;

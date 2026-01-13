@@ -21,8 +21,29 @@
     h
   } from './dist/runtime-dom.js'
 
-  const v1 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
-  const v2 = h('h1', { key: 'world', style: { color: 'red' }}, 'hello vue3');
+  // 新的是文本, 老的是数组
+  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
+  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
+
+  // 新的是文本, 老的也是文本
+  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, '123');
+  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, '321');
+
+  // 新的是文本, 老的是空
+  // const v1 = h('h1', { key: 'world', style: { color: 'red' }});
+  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, '321');
+
+  // 新的是数组, 老的是文本或空
+  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, '321');
+  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
+
+
+  // 新的是数组, 老的也是数组
+  const v1 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {href: 'http://www.github.com'}, 'github') , h('div', 'hello world'));
+  const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'hello vue'));
+
+  // const v1 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
+  // const v2 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
   render(v1, app);
 
 
