@@ -82,6 +82,15 @@ export function createRenderer(renderOptions) {
   }
 
   /*
+  * @param c1 旧子节点数组
+  * @param c2 新子节点数组
+  * @param el 容器元素
+  * */
+  const patchKeyedChildren = (c1, c2, el) => {
+    console.log(c1, c2, el);
+  }
+
+  /*
   * @param n1 旧节点
   * @param n2 新节点
   * @param container 容器元素
@@ -149,6 +158,7 @@ export function createRenderer(renderOptions) {
         // 老的是数组
         if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
           // diff
+          patchKeyedChildren(c1, c2, el);
         }
         // 新的是空
         // 老的是数组 ---> 卸载老的
