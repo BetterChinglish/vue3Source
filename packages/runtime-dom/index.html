@@ -21,29 +21,57 @@
     h
   } from './dist/runtime-dom.js'
 
-  // 新的是文本, 老的是数组
-  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
-  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
 
-  // 新的是文本, 老的也是文本
-  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, '123');
-  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, '321');
+  // 只有新增且新增元素连续
+  // const v1 = h('div', {}, [
+  //   h('div', { key: 'a'}, 'a'),
+  //   h('div', { key: 'b'}, 'b'),
+  //   h('div', { key: 'c'}, 'c'),
+  // ])
+  // const v2 = h('div', {}, [
+  //   h('div', { key: 'a'}, 'a'),
+  //   h('div', { key: 'd', style: {color: 'red'}}, 'd'),
+  //   h('div', { key: 'b'}, 'b'),
+  //   h('div', { key: 'c'}, 'c'),
+  // ])
 
-  // 新的是文本, 老的是空
-  // const v1 = h('h1', { key: 'world', style: { color: 'red' }});
-  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, '321');
+  // 只有删除且删除元素连续
+  // const v1 = h('div', {}, [
+  //   h('div', { key: 'a'}, 'a'),
+  //   h('div', { key: 'd', style: {color: 'red'}}, 'd'),
+  //   h('div', { key: 'b'}, 'b'),
+  //   h('div', { key: 'c'}, 'c'),
+  // ])
+  // const v2 = h('div', {}, [
+  //   h('div', { key: 'a'}, 'a'),
+  //   h('div', { key: 'b'}, 'b'),
+  //   h('div', { key: 'c'}, 'c'),
+  // ])
 
-  // 新的是数组, 老的是文本或空
-  // const v1 = h('h1', { key: 'world', style: { color: 'red' }}, '321');
-  // const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
+  // 复杂的增删改
+  // a b c d e f g
+  const v1 = h('div', {}, [
+    h('div', { key: 'a'}, 'a'),
+    h('div', { key: 'b'}, 'b'),
+    h('div', { key: 'c', style: {color: 'red'}}, 'c'),
+    h('div', { key: 'd', style: {color: 'yellow'}}, 'd'),
+    h('div', { key: 'e', style: {color: 'blue'}}, 'e'),
+    h('div', { key: 'f'}, 'f'),
+    h('div', { key: 'g'}, 'g'),
+  ])
+  // -> a b e c d h f g
+  const v2 = h('div', {}, [
+    h('div', { key: 'a'}, 'a'),
+    h('div', { key: 'b'}, 'b'),
+    h('div', { key: 'e', style: {color: 'blue'}}, 'e'),
+    h('div', { key: 'c', style: {color: 'pink'}}, 'c'),
+    h('div', { key: 'd', style: {color: 'yellow'}}, 'd'),
+    h('div', { key: 'h', style: {color: 'pink'}}, 'h'),
+    h('div', { key: 'f'}, 'f'),
+    h('div', { key: 'g'}, 'g'),
+  ])
 
 
-  // 新的是数组, 老的也是数组
-  const v1 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {href: 'http://www.github.com'}, 'github') , h('div', 'hello world'));
-  const v2 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'hello vue'));
-
-  // const v1 = h('h1', { key: 'world', b: '3', style: { 'font-size': '54px'} }, 'hello world');
-  // const v2 = h('h1', { key: 'world', style: { color: 'red' }}, h('a', {src: 'www.baidu.com'}, 'baidu') , h('div', 'div text'));
   render(v1, app);
 
 

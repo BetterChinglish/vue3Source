@@ -23,7 +23,7 @@ export function createRenderer(renderOptions) {
     }
   }
   // 首次创建挂载
-  const mountElement = (vnode, container) => {
+  const mountElement = (vnode, container, anchor) => {
     const {type, children, props, shapeFlag} = vnode
 
     const el = vnode.el = hostCreateElement(type)
@@ -44,14 +44,14 @@ export function createRenderer(renderOptions) {
       mountChildren(children, el);
     }
 
-    hostInsert(el, container)
+    hostInsert(el, container, anchor);
   }
 
 
-  const processElement = (n1, n2, container) => {
+  const processElement = (n1, n2, container, anchor) => {
     // 旧节点不存在，说明是新增节点
     if (n1 === null) {
-      mountElement(n2, container);
+      mountElement(n2, container, anchor);
     }
     else {
       patchElement(n1, n2, container);
@@ -87,7 +87,128 @@ export function createRenderer(renderOptions) {
   * @param el 容器元素
   * */
   const patchKeyedChildren = (c1, c2, el) => {
-    console.log(c1, c2, el);
+    // 原理类似vue2，先双端对比，再复杂diff
+    let i = 0;
+    let e1 = c1.length - 1;
+    let e2 = c2.length - 1;
+    
+    // 从前往后比对, 挪动i
+    while(i <= e1 && i <= e2) {
+      const n1 = c1[i];
+      const n2 = c2[i];
+      // 如果是同一个节点，就复用元素patch更新元素内容
+      if(isSameVNode(n1, n2)) {
+        patch(n1, n2, el);
+      } else {
+        break;
+      }
+      i++;
+    }
+    
+    // 从后往前比对, 挪动e1和e2
+    while(i <= e1 && i <= e2) {
+      const n1 = c1[e1];
+      const n2 = c2[e2];
+      if(isSameVNode(n1, n2)) {
+        patch(n1, n2, el);
+      } else {
+        break;
+      }
+      e1--;
+      e2--;
+    }
+    
+    // 经过上面两个循环后我们会得到前后绝对没有相同节点的两个数组，其中i为这两个数组的起始下标，而e1和e2分别为旧节点和新节点数组的结束下标
+    // 但是倘若i大于e1或e2，说明某一方已经比对完毕了，接下来就只需要处理另一方剩下的节点即可
+    // 如果i大于e1，说明旧节点已经比对完毕，接下来只需要将新节点剩下的节点进行挂载即可 ---- 只有新增且新增的节点连续
+    // 如果i大于e2，说明新节点已经比对完毕，接下来只需要将旧节点剩下的节点进行卸载即可 ---- 只有删除且删除的节点连续
+    // 例如： a,b,c,d  和 a,b,e,f,c,d, 此时i=2，e1 = 1， e2= 3
+    
+    // 如果是纯连续新增，则i大于e1且i小于等于e2
+    // 如果是纯连续删除，则i大于e2且i小于等于e1
+    if(i > e1) { // 新增
+      if(i <= e2) {
+        // 新增有两种情况，一种是后面插入a b->a b x x，另一种是前面插入a b->x x a b，还有可能是中间插入 a b c d -> a b x x c d
+        // 此时我们判断插入的位置，如果e2+1位置有值，说明是在中间或前面插入，否则就是在后面插入
+        // 如果是在中间或者前面插入则使用insertBefore，如果是在后面插入则使用appendChild
+        const insertEl = c2[e2 + 1]?.el
+        const anchor =  !!insertEl ? insertEl : null;
+        console.log(anchor)
+        while(i <= e2) {
+          patch(null, c2[i], el, anchor);
+          i++;
+        }
+      }
+    } else if(i > e2) { // 删除
+      if(i <= e1) {
+        // 删除多余节点
+        while(i <= e1) {
+          unmount(c1[i])
+          i++;
+        }
+      }
+    } else {
+      // 如果对比完后，两边都有剩余节点，且剩余的节点可能需要复用，则进行复杂diff逻辑处理
+      //
+      // 例如a b c d e f g -> a b e c d h f g
+      // 对比完后, i=2, e1=4, e2=5
+      // 左边剩余 c d e，右边剩余 e c d h
+      // 此时cde均需要复用更新，而h需要新增
+      
+      let
+        s1 = i,
+        s2 = i;
+      
+      // 构建新节点映射表
+      const keyToNewIndexMap = new Map();
+      for(let i = s2; i <= e2; i++) {
+        const vnode = c2[i];
+        keyToNewIndexMap.set(vnode.key, i);
+      }
+      
+      // 遍历老的，如果不存在则删除，如果存在则去更新dom属性
+      for(let i = s1; i <= e1; i++) {
+        const vnode = c1[i];
+        const newIndex = keyToNewIndexMap.get(vnode.key);
+        // 如果老元素在新列表中不存在，则删除该元素即可
+        if(newIndex === undefined) {
+          unmount(vnode);
+        }
+        // 如果存在，则更新元素
+        else {
+          patch(vnode, c2[newIndex], el);
+        }
+      }
+      
+      // 更新完元素后，再去调整元素顺序
+      
+      // 需要插入的数量
+      const toBePatched = e2 - s2 + 1;
+      // 遍历新的虚拟节点的不同部分（从后往前），如果有，说明需要移动
+      for(let i = toBePatched - 1; i>=0; i--) {
+        const nextIndex = s2 + i;
+        const nextChild = c2[nextIndex];
+        const anchorVNode = c2[nextIndex + 1];
+        const anchor = anchorVNode?.el || null;
+        // 如果虚拟节点上el没有真实dom，说明没有，需要创建并挂在
+        if(!nextChild.el) {
+          patch(null, nextChild, el, anchor);
+        }
+        // 否则移动位置
+        else {
+          hostInsert(nextChild.el, el, anchor);
+        }
+      }
+    }
+    
+
+    
+    
+    
+    
+    
+    
+    
   }
 
   /*
@@ -143,7 +264,6 @@ export function createRenderer(renderOptions) {
       }
       // 否则旧节点是文本或者空, 直接设置新文本
 
-      console.log('新的是文本，老的是文本或空')
       if(c1 !== c2) {
         hostSetElementText(el, c2);
       }
@@ -200,20 +320,21 @@ export function createRenderer(renderOptions) {
    * @param n1 - 旧节点
    * @param n2 - 新节点
    * @param container - 容器元素
+   * @param anchor - 锚点元素
    */
-  const patch = (n1, n2, container) => {
+  const patch = (n1, n2, container, anchor = null) => {
     if(n1 === n2) {
       return;
     }
 
-    // 渲染过一次，需要查看上一次的节点和这次的节点是否相同，如果不同就卸载重新挂载
+    // 渲染过一次，需要查看上一次的节点和这次的节点是否相同，如果不同就卸载重新创建挂载
     if(n1 && !isSameVNode(n1, n2)) {
       unmount(n1);
-      // n1为null会重新执行mountElement
+      // n1为null时，processElement中会重新执行mountElement去创建挂载
       n1 = null;
     }
 
-    processElement(n1, n2, container);
+    processElement(n1, n2, container, anchor);
   }
 
   /**
