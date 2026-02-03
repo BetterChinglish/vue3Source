@@ -16,7 +16,7 @@
   //   h
   // } from '/node_modules/@vue/runtime-dom/dist/runtime-dom.esm-browser.js';
 
-  import { 
+  import {
     render,
     h
   } from './dist/runtime-dom.js'
@@ -63,10 +63,10 @@
   const v2 = h('div', {}, [
     h('div', { key: 'a'}, 'a'),
     h('div', { key: 'b'}, 'b'),
+    h('div', { key: 'h', style: {color: 'pink'}}, 'h'),
     h('div', { key: 'e', style: {color: 'blue'}}, 'e'),
     h('div', { key: 'c', style: {color: 'pink'}}, 'c'),
     h('div', { key: 'd', style: {color: 'yellow'}}, 'd'),
-    h('div', { key: 'h', style: {color: 'pink'}}, 'h'),
     h('div', { key: 'f'}, 'f'),
     h('div', { key: 'g'}, 'g'),
   ])

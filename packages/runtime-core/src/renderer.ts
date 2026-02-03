@@ -1,5 +1,6 @@
 import { ShapeFlags } from '@vue/shared';
 import { isSameVNode } from './createVNode';
+import getSequence from "./seq";
 
 // 不关心api层面，可以跨平台
 export function createRenderer(renderOptions) {
@@ -159,6 +160,13 @@ export function createRenderer(renderOptions) {
         s1 = i,
         s2 = i;
       
+      // 需要插入的数量
+      const toBePatched = e2 - s2 + 1;
+      
+      // diff算法使用
+      // 新元素对应老元素的位置，不存在默认0
+      const  newIndexToOldMapIndex = new Array(toBePatched).fill(0);
+      
       // 构建新节点映射表
       const keyToNewIndexMap = new Map();
       for(let i = s2; i <= e2; i++) {
@@ -174,16 +182,19 @@ export function createRenderer(renderOptions) {
         if(newIndex === undefined) {
           unmount(vnode);
         }
-        // 如果存在，则更新元素
         else {
+          // 存在则说明需要复用该元素，记录该元素在老节点的位置+1（因为0表示不存在）
+          newIndexToOldMapIndex[newIndex - s1] = i + 1 ;
+          // 如果存在，则更新元素
           patch(vnode, c2[newIndex], el);
         }
       }
       
       // 更新完元素后，再去调整元素顺序
-      
-      // 需要插入的数量
-      const toBePatched = e2 - s2 + 1;
+      // 获取不需要移动的最长递增子序列
+      const increasingNewIndexSequence = getSequence(newIndexToOldMapIndex);
+      let j = increasingNewIndexSequence.length -1;
+
       // 遍历新的虚拟节点的不同部分（从后往前），如果有，说明需要移动
       for(let i = toBePatched - 1; i>=0; i--) {
         const nextIndex = s2 + i;
@@ -196,7 +207,12 @@ export function createRenderer(renderOptions) {
         }
         // 否则移动位置
         else {
-          hostInsert(nextChild.el, el, anchor);
+          // 如果元素在最长递增子序列中则无需移动，否则移动
+          if(i !== increasingNewIndexSequence[j]) {
+            hostInsert(nextChild.el, el, anchor);
+          } else {
+            j--;
+          }
         }
       }
     }
