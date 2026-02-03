@@ -1,5 +1,5 @@
 import { ShapeFlags } from '@vue/shared';
-import { isSameVNode } from './createVNode';
+import { isSameVNode, Text } from './createVNode';
 import getSequence from "./seq";
 
 // 不关心api层面，可以跨平台
@@ -56,6 +56,24 @@ export function createRenderer(renderOptions) {
     }
     else {
       patchElement(n1, n2, container);
+    }
+  }
+  const processText = (n1, n2, container) => {
+    // 首次渲染，n1为空
+    if(n1 === null) {
+      const text = n2.children;
+      // 虚拟节点关联真实dom
+      const textNode = n2.el = hostCreateText(text);
+      // 插入文本节点
+      hostInsert(textNode, container);
+    } else {
+      // 复用文本节点
+      const el = n2.el = n1.el;
+      // 如果文本不一样则更新文本
+      if(n2.children !== n1.children) {
+        // 更新文本内容
+        hostSetText(el, n2.children);
+      }
     }
   }
 
@@ -349,8 +367,16 @@ export function createRenderer(renderOptions) {
       // n1为null时，processElement中会重新执行mountElement去创建挂载
       n1 = null;
     }
-
-    processElement(n1, n2, container, anchor);
+    
+    const { type } = n2;
+    switch(type) {
+      case Text:
+        processText(n1, n2, container);
+        break;
+      default:
+        processElement(n1, n2, container, anchor);
+        break;
+    }
   }
 
   /**
@@ -373,13 +399,13 @@ export function createRenderer(renderOptions) {
       if(container._vnode) {
         unmount(container._vnode);
       }
+    } else {
+      // 第一次render时，container._vnode为null
+      // 后续render时，container._vnode为上一次render的虚拟节点
+      patch(container._vnode || null, vnode, container);
+      
+      container._vnode = vnode;
     }
-
-    // 第一次render时，container._vnode为null
-    // 后续render时，container._vnode为上一次render的虚拟节点
-    patch(container._vnode || null, vnode, container);
-
-    container._vnode = vnode;
   }
 
   return {

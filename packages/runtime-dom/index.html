@@ -18,67 +18,14 @@
 
   import {
     render,
-    h
+    h,
+    Text
   } from './dist/runtime-dom.js'
 
+  render(h(Text, 'hello world'), app);
 
-  // 只有新增且新增元素连续
-  // const v1 = h('div', {}, [
-  //   h('div', { key: 'a'}, 'a'),
-  //   h('div', { key: 'b'}, 'b'),
-  //   h('div', { key: 'c'}, 'c'),
-  // ])
-  // const v2 = h('div', {}, [
-  //   h('div', { key: 'a'}, 'a'),
-  //   h('div', { key: 'd', style: {color: 'red'}}, 'd'),
-  //   h('div', { key: 'b'}, 'b'),
-  //   h('div', { key: 'c'}, 'c'),
-  // ])
-
-  // 只有删除且删除元素连续
-  // const v1 = h('div', {}, [
-  //   h('div', { key: 'a'}, 'a'),
-  //   h('div', { key: 'd', style: {color: 'red'}}, 'd'),
-  //   h('div', { key: 'b'}, 'b'),
-  //   h('div', { key: 'c'}, 'c'),
-  // ])
-  // const v2 = h('div', {}, [
-  //   h('div', { key: 'a'}, 'a'),
-  //   h('div', { key: 'b'}, 'b'),
-  //   h('div', { key: 'c'}, 'c'),
-  // ])
-
-  // 复杂的增删改
-  // a b c d e f g
-  const v1 = h('div', {}, [
-    h('div', { key: 'a'}, 'a'),
-    h('div', { key: 'b'}, 'b'),
-    h('div', { key: 'c', style: {color: 'red'}}, 'c'),
-    h('div', { key: 'd', style: {color: 'yellow'}}, 'd'),
-    h('div', { key: 'e', style: {color: 'blue'}}, 'e'),
-    h('div', { key: 'f'}, 'f'),
-    h('div', { key: 'g'}, 'g'),
-  ])
-  // -> a b e c d h f g
-  const v2 = h('div', {}, [
-    h('div', { key: 'a'}, 'a'),
-    h('div', { key: 'b'}, 'b'),
-    h('div', { key: 'h', style: {color: 'pink'}}, 'h'),
-    h('div', { key: 'e', style: {color: 'blue'}}, 'e'),
-    h('div', { key: 'c', style: {color: 'pink'}}, 'c'),
-    h('div', { key: 'd', style: {color: 'yellow'}}, 'd'),
-    h('div', { key: 'f'}, 'f'),
-    h('div', { key: 'g'}, 'g'),
-  ])
-
-
-  render(v1, app);
-
-
-  // 更新时，会对比v1和v2，然后只更新有变化的部分
-  // 但是如果并非同一个元素如h1变为div，则不会复用
   setTimeout(() => {
-    render(v2, app);
+    render(h(Text, 'hello js'), app);
   }, 2000);
 
 </script>

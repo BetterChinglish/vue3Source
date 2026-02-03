@@ -4,6 +4,8 @@ export function isVNode(value) {
   return value.__v_isVNode === true;
 }
 
+export const Text = Symbol('Text');
+
 /**
  * 判断是否为相同的vnode
  * @param n1 - 旧节点
