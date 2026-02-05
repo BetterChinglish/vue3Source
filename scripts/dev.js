@@ -150,6 +150,18 @@ const entry = resolve(__dirname, `../packages/${target}/src/index.ts`);
 // package.json信息
 const pkg = require(`../packages/${target}/package.json`);
 
+let times = 0;
+
+const plugins = [
+  {
+    name: 'log-rebuild',
+    setup(build) {
+      build.onEnd(() => {
+        console.log(`${times++===0 ? 'build' : 'rebuild'}: ${target} - ${format}`)
+      })
+    },
+  },
+]
 
 // 根据需要进行打包, 当前开发环境使用esbuild进行打包
 esbuild.context({
@@ -161,6 +173,7 @@ esbuild.context({
   bundle: true,
   platform: 'browser',
   sourcemap: true,
+  plugins,
   
   // 打包格式 cjs esm iife
   format,
