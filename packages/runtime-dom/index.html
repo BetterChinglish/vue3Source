@@ -19,13 +19,25 @@
   import {
     render,
     h,
-    Text
+    Text,
+    Fragment
   } from './dist/runtime-dom.js'
 
-  render(h(Text, 'hello world'), app);
+  render(h(Fragment, [
+    h('div', 'hello'),
+    h('div', 'vue3')
+  ]), app);
+
 
   setTimeout(() => {
-    render(h(Text, 'hello js'), app);
+    // fragment更新
+    // render(h(Fragment, [
+    //   h('div', 'hello'),
+    //   h('div', 'js')
+    // ]), app);
+
+    // fragment卸载
+    render(null, app);
   }, 2000);
 
 </script>

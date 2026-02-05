@@ -6,6 +6,8 @@ export function isVNode(value) {
 
 export const Text = Symbol('Text');
 
+export const Fragment = Symbol('Fragment');
+
 /**
  * 判断是否为相同的vnode
  * @param n1 - 旧节点

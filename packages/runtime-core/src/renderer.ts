@@ -1,5 +1,5 @@
 import { ShapeFlags } from '@vue/shared';
-import { isSameVNode, Text } from './createVNode';
+import { isSameVNode, Text, Fragment } from './createVNode';
 import getSequence from "./seq";
 
 // 不关心api层面，可以跨平台
@@ -74,6 +74,17 @@ export function createRenderer(renderOptions) {
         // 更新文本内容
         hostSetText(el, n2.children);
       }
+    }
+  }
+  
+  const processFragment = (n1, n2, container, anchor) => {
+    // 老节点不存在，说明是新增，新增的话只需要挂载fragment即可，而fragment只需要挂载子节点
+    if(n1 === null) {
+      // 挂载子节点
+      mountChildren(n2.children, container);
+    } else {
+      // 老节点非空，说明是更新操作，更新fragment即是更新子节点
+      patchChildren(n1, n2, container);
     }
   }
 
@@ -152,7 +163,6 @@ export function createRenderer(renderOptions) {
         // 如果是在中间或者前面插入则使用insertBefore，如果是在后面插入则使用appendChild
         const insertEl = c2[e2 + 1]?.el
         const anchor =  !!insertEl ? insertEl : null;
-        console.log(anchor)
         while(i <= e2) {
           patch(null, c2[i], el, anchor);
           i++;
@@ -273,21 +283,6 @@ export function createRenderer(renderOptions) {
     *
     * */
 
-    if(shapeFlag & ShapeFlags.TEXT_CHILDREN) {
-      console.log('新的是文本')
-    } else if(shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-      console.log('新的是数组')
-    } else {
-      console.log('新的是空')
-    }
-    if(prevShapeFlag & ShapeFlags.TEXT_CHILDREN) {
-      console.log('老的是文本')
-    } else if (prevShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-      console.log('老的是数组')
-    } else {
-      console.log('老的是空')
-    }
-
     // if 新节点是文本
     // 老的是数组 或 文本 或 空
     if(shapeFlag & ShapeFlags.TEXT_CHILDREN) {
@@ -373,6 +368,9 @@ export function createRenderer(renderOptions) {
       case Text:
         processText(n1, n2, container);
         break;
+      case Fragment:
+        processFragment(n1, n2, container, anchor);
+        break;
       default:
         processElement(n1, n2, container, anchor);
         break;
@@ -384,7 +382,11 @@ export function createRenderer(renderOptions) {
    * @param vnode - 要卸载的虚拟节点
    */
   const unmount = (vnode) => {
-    hostRemove(vnode.el);
+    if(vnode.type === Fragment) {
+      unmountChildren(vnode.children);
+    } else {
+      hostRemove(vnode.el);
+    }
   }
 
   // 多次调用render会进行虚拟节点的对比，然后再进行更新
