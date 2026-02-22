@@ -23,21 +23,35 @@
     Fragment
   } from './dist/runtime-dom.js'
 
-  render(h(Fragment, [
-    h('div', 'hello'),
-    h('div', 'vue3')
-  ]), app);
+  const myComponent = {
+    data() {
+      return {
+        name: 'zhangsan',
+        age: 18
+      }
+    },
+    render() {
+      setTimeout(() => {
+        // this.age++;
+        // this.age++;
+      }, 1000)
+      return h('div', {}, [
+        h('p', {}, 'name: ' + this.name),
+        h('p', {}, 'age: ' + this.age)
+      ])
+    }
+  }
+
+  // 此时h方法接受的是组件对象，我们需要为其新增一个类型，来区分是组件还是元素
+  render(
+    h(myComponent),
+    app
+  )
+
 
 
   setTimeout(() => {
-    // fragment更新
-    // render(h(Fragment, [
-    //   h('div', 'hello'),
-    //   h('div', 'js')
-    // ]), app);
 
-    // fragment卸载
-    render(null, app);
   }, 2000);
 
 </script>

@@ -1,6 +1,9 @@
 import { ShapeFlags } from '@vue/shared';
 import { isSameVNode, Text, Fragment } from './createVNode';
 import getSequence from "./seq";
+import {reactive, ReactiveEffect} from "@vue/reactivity";
+import {h} from "@vue/runtime-core";
+import { queueJob } from "./scheduler";
 
 // 不关心api层面，可以跨平台
 export function createRenderer(renderOptions) {
@@ -87,6 +90,67 @@ export function createRenderer(renderOptions) {
       patchChildren(n1, n2, container);
     }
   }
+  
+  const mountComponent = (n1, n2, container, anchor) => {
+    // 组件可以基于自己的状态重新渲染 => effect 注意虚拟节点为组件时type中存放的才是组件的定义
+    const { data = () => ({}), render } = n2.type;
+    
+    // 使用reactive包裹data数据
+    const state = reactive(data());
+    const instance = {
+      // 状态
+      state,
+      // 组件的虚拟节点
+      vnode: n2,
+      // 子树
+      subTree: null,
+      // 是否挂载完成
+      isMounted: false,
+      // 更新函数
+      update: null
+    }
+    
+    const componentUpdateFn = () => {
+      if(!instance.isMounted) {
+        // 将state代理传给render方法，让组件定义时的render方法可以访问到组件的状态数据，
+        // vue2中传过去的是createElement，vue3中h方法被暴露在runtime-core中，组件定义时的render方法可以直接使用h方法
+        const subTree = render.call(state, state);  // render执行完返回的就是组件的虚拟节点树
+        instance.subTree = subTree;
+        // 需要区分首次挂载还是后续更新
+        patch(null, subTree, container, anchor);
+        
+        instance.isMounted = true;
+      } else {
+        const subTree = render.call(state, state);
+        const prevSubTree = instance.subTree;
+        patch(prevSubTree, subTree, container, anchor);
+        instance.subTree = subTree;
+      }
+
+    }
+    
+    const effect =  new ReactiveEffect(componentUpdateFn, () => {
+      queueJob(instance.update);
+    })
+    
+    const update = instance.update = () => {
+      effect.run();
+    }
+    
+    update();
+  }
+  
+  
+  const processComponent = (n1, n2, container, anchor) => {
+    if(n1 === null) {
+      // 组件初次渲染
+      mountComponent(n1, n2, container, anchor);
+    } else {
+      // 组件更新
+      // patchComponent(n1, n2, container, anchor);
+    }
+  }
+  
 
   const patchProps = (oldProps, newProps, el) => {
     // hostPatchProp()
@@ -363,7 +427,7 @@ export function createRenderer(renderOptions) {
       n1 = null;
     }
     
-    const { type } = n2;
+    const { type, shapeFlag } = n2;
     switch(type) {
       case Text:
         processText(n1, n2, container);
@@ -372,7 +436,14 @@ export function createRenderer(renderOptions) {
         processFragment(n1, n2, container, anchor);
         break;
       default:
-        processElement(n1, n2, container, anchor);
+        if(shapeFlag & ShapeFlags.ELEMENT) {
+          processElement(n1, n2, container, anchor);
+        }
+        // ShapeFlags.COMPONENT包含了函数式组件和带状态组件
+        else if(shapeFlag & ShapeFlags.COMPONENT) {
+          processComponent(n1, n2, container, anchor);
+        
+        }
         break;
     }
   }
