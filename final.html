@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+   <!-- 引入 @opentiny/fluent-editor -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@opentiny/fluent-editor": "https://unpkg.com/@opentiny/fluent-editor@3.18.3/index.es.js"
+      }
+    }
+  </script>
+  <!-- 引入 @opentiny/fluent-editor 样式 -->
+  <link rel="stylesheet" href="https://unpkg.com/@opentiny/fluent-editor@3.18.3/style.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    /* #app {
+      position: relative;
+    } */
+    #editor {
+      height: 90vh;
+      width: 70vw;
+      display: inline-block;
+    }
+    #suggestions-panel {
+      height: 90vh;
+      width: 28vw;
+      position: absolute;
+      right: 0px;
+      top: 40px;
+      border: 1px solid #ccc;
+    }
+    .suggestion-item {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .suggestion-item:hover {
+      background: #f0f7ff;
+    }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .badge.replace {
+      background: #ffebee;
+      color: #c62828;
+    }
+    .badge.insert {
+      background: #e3f2fd;
+      color: #0d47a1;
+    }
+    .apply-btn {
+      background: #1976d2;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .apply-btn:hover {
+      background: #1565c0;
+    }
+    #apply-all {
+      width: 100%;
+      padding: 10px;
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      margin-top: 16px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #clear-highlight {
+      width: 100%;
+      margin-top: 8px;
+      background: #9e9e9e;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+  <div id="suggestions-panel">
+    <h3>✏️ 修改建议</h3>
+    <div id="suggestions-list"></div>
+    <button id="apply-all">✅ 全部应用</button>
+    <button id="clear-highlight">🧹 清除高亮</button>
+  </div>
+  
+  <script type="module">
+    // 引入 @opentiny/fluent-editor
+    import FluentEditor from '@opentiny/fluent-editor'
+    let content = `<h1 id="题目描述">题目描述</h1>
+      <p>现在需要对一个文档中的内容调用一个后端接口转成<em>html字符串</em>后</p>
+      <p>再将这个html字符串传给ai接口后，ai接口输出哪个段落哪个字段有违法、语法错误、格式错误的信息，前端获取到这些json串后，不同类型按不同颜色渲染到富文本组件中，点击大模型给出的修改建议，</p>
+      <p>可以将大模型修改建议同步到富文本中</p>
+      <p>1、前端导入的文本是doc或者docx</p>
+      <p>2、导入后的文本直接调用ai接口，接口形式是http请求</p>
+      <p>3、ai返回的格式类似于：</p>
+      <p>{</p>
+      <p>"result": [</p>
+      <p>{</p>
+      <p>"type": "insert",</p>
+      <p>"start_idx": 10,</p>
+      <p>"end_idx": 10,</p>
+      <p>"start_idx_fix": 10,</p>
+      <p>"end_idx_fix": 12,</p>
+      <p>"ori_text": null,</p>
+      <p>"fix_text": "\u8fdb\u884c",</p>
+      <p>"class_name": "正文"</p>
+      <p>},---------原文信息</p>
+      <p>{</p>
+      <p>"type": "replace",</p>
+      <p>"start_idx": 81,</p>
+      <p>"end_idx": 82,</p>
+      <p>"start_idx_fix": 83,</p>
+      <p>"end_idx_fix": 84,</p>
+      <p>"ori_text": "\u9ad8",</p>
+      <p>"fix_text": "\u5347",</p>
+      <p>"class_name": "违法"----违规违法类型</p>
+      <p>}----------大模型给出的修改信息</p>
+      <p>]</p>
+      <p>}</p>
+      <p>4、要求富文本保留基础的html样式(标题、一级标题、正文等基础标签)</p>
+      <p>5、要求同步大模型修改意见后，不影响原富文本中格式</p>
+    `
+
+    // 初始化 TinyEditor 富文本编辑器
+    const editor = new FluentEditor('#editor', {
+      theme: 'snow',
+    })
+    editor.root.innerHTML = content
+
+    function renderSuggestions() {
+      const suggestions = mockSuggestions.result;
+      console.log(suggestions);
+      
+      const listEl = document.getElementById('suggestions-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      suggestions.forEach((s, idx) => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        item.dataset.index = idx;
+
+        const header = document.createElement('div');
+        header.className = 'suggestion-header';
+        header.innerHTML = `
+          <span class="badge ${s.type}">${s.type === 'replace' ? '替换' : '插入'}</span>
+          <span style="color: #666; font-size: 12px;">${s.class_name || ''}</span>
+        `;
+
+        const content = document.createElement('div');
+        content.style.margin = '8px 0';
+        if (s.type === 'replace') {
+          content.innerHTML = `<span style="color: #c62828; text-decoration: line-through;">${s.ori_text}</span> 
+                               → 
+                               <span style="color: #2e7d32;">${s.fix_text}</span>`;
+        } else {
+          content.innerHTML = `插入 <strong style="background: #bbdefb; padding: 0 2px;">${s.fix_text}</strong>`;
+        }
+
+        const applyBtn = document.createElement('button');
+        applyBtn.className = 'apply-btn';
+        applyBtn.textContent = '应用此条';
+        applyBtn.onclick = (e) => {
+          e.stopPropagation();
+          applySingleSuggestion(s, suggestions);
+        };
+
+        // 点击条目时，在编辑器中选中对应内容
+        item.onclick = () => {
+          if (s.type === 'replace' && s.highlight_range) {
+            editor.setSelection(s.highlight_range.start, s.highlight_range.length);
+          } else if (s.type === 'insert' && s.marker_pos !== undefined) {
+            editor.setSelection(s.marker_pos, s.marker_length);
+          }
+          editor.focus();
+        };
+
+        item.appendChild(header);
+        item.appendChild(content);
+        item.appendChild(applyBtn);
+        listEl.appendChild(item);
+      });
+
+      // 如果没有建议，显示提示
+      if (suggestions.length === 0) {
+        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">✅ 暂无修改建议</div>';
+      }
+    }
+
+    // 应用单条建议
+    function applySingleSuggestion(s, suggestions) {
+      let changedIdx = 0; // 本次修改对后续文本的影响长度
+      if(s.type === 'replace') {
+        console.log(content.substring(0, s.start_idx));
+        
+        content = content.substring(0, s.start_idx) + s.fix_text + content.substring(s.end_idx);
+        editor.root.innerHTML = content;
+        changedIdx = s.fix_text.length - s.ori_text.length; // 计算本次修改对后续文本的影响长度
+        
+      } else if(s.type === 'insert') {
+        content = content.substring(0, s.start_idx) + s.fix_text + content.substring(s.start_idx);
+        editor.root.innerHTML = content;
+        changedIdx = s.fix_text.length; // 插入文本的长度
+      }
+
+      // 此条之后的需要更新
+      const thisIndex = suggestions.indexOf(s);
+      const others = suggestions.filter((_, idx) => idx > thisIndex);
+
+      if(changedIdx !== 0) {
+        others.forEach(item => {
+          item.start_idx += changedIdx;
+          item.end_idx += changedIdx;
+        })
+      }
+
+      mockSuggestions.result = suggestions.filter(item => item !== s); // 从建议列表中移除已应用的建议
+      renderSuggestions();
+      highlightSuggestions();
+    }
+
+    // 应用全部建议
+    function applyAllSuggestions() {
+      mockSuggestions.result.forEach(s => {
+        applySingleSuggestion(s, mockSuggestions.result);
+      })
+    }
+
+    function highlightSuggestions() {
+      let highlightedContent = content;
+      let changedLength = 0; // 累积的长度变化，用于调整后续建议的位置
+      mockSuggestions.result.forEach(s => {
+        if(s.type === 'replace') {
+          const start = s.start_idx + changedLength;
+          const end = s.end_idx + changedLength;
+          const pre = highlightedContent.substring(0, start); 
+          const post = highlightedContent.substring(end);   
+          const oriText = highlightedContent.substring(start, end);
+          const visualText = `<span style="background: #ffcdd2; text-decoration: underline 2px solid #d32f2f;">${oriText} -> ${s.fix_text}</span>`;
+          highlightedContent = pre + visualText + post;
+          changedLength += visualText.length - oriText.length;
+        } else if(s.type === 'insert') {
+          const start = s.start_idx + changedLength;
+          const pre = highlightedContent.substring(0, start);
+          const visualText = `<span style="background: #bbdefb; padding: 0 2px;">${s.fix_text}</span>`;
+          highlightedContent = pre + visualText + highlightedContent.substring(start);
+          changedLength += visualText.length;
+        }
+      })
+      editor.root.innerHTML = highlightedContent;
+    }
+
+    document.getElementById('apply-all').addEventListener('click', () => {
+      applyAllSuggestions();
+    });
+
+    document.getElementById('clear-highlight').addEventListener('click', () => {
+      mockSuggestions.result.length = 0; // 清空建议列表
+      renderSuggestions();
+      editor.root.innerHTML = content; // 恢复原始内容，去除高亮
+    });
+
+    let mockSuggestions = {
+      result: [
+        {
+          type: 'replace',
+          start_idx: 14,
+          end_idx: 16,
+          ori_text: '题目',
+          fix_text: '项目',
+          class_name: '违法',
+        },
+        {
+          type: 'insert',
+          start_idx: 52,
+          end_idx: 52,
+          ori_text: null,
+          fix_text: 'api',
+          class_name: '正文',
+        },
+      ],
+    };
+
+    setTimeout(() => {
+      renderSuggestions();
+      highlightSuggestions()
+    }, 0);
+  </script>
+</body>
+</html>
