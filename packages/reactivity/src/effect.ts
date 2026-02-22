@@ -102,7 +102,7 @@ export class ReactiveEffect {
 
       this._running++;
 
-      // 依赖手机：执行fn方法，触发对象的get操作进行依赖收集
+      // 依赖收集：执行fn方法，触发对象的get操作进行依赖收集
       return this.fn();
     } finally {
       this._running--;
