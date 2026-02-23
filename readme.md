@@ -9,6 +9,16 @@
   * [将shared包安装到reactivity中](#将shared包安装到reactivity中)
   * [开发环境打包脚本](#开发环境打包脚本)
   * [本章结尾](#本章结尾)
+* [响应式系统](#响应式系统)
+  * [基本实现](#基本实现)
+  * [完善响应式系统](#完善响应式系统)
+  * [分支切换](#分支切换)
+  * [嵌套的effect与effect栈](#嵌套的effect与effect栈)
+  * [避免无限递归循环](#避免无限递归循环)
+  * [调度执行](#调度执行)
+* [js对象与proxy的工作原理](#js对象与proxy的工作原理)
+  * [直接使用target[key]会有问题](#直接使用targetkey会有问题)
+  * [使用Reflect](#使用reflect)
 <!-- TOC -->
 
 # 环境搭建
@@ -181,3 +191,1559 @@ pnpm install @vue/shared -w --filter @vue/reactivity
 好了, 万事俱备, 接下来可以写源码了, 对于原理并不熟悉的朋友可以先看一下我写的一篇[github: vue3响应式系统基本原理](https://github.com/BetterChinglish/vue3Source/blob/main/read/01%20%E5%93%8D%E5%BA%94%E7%B3%BB%E7%BB%9F/summary.md)
 
 如果绝对太过深入或者只想了解一下然后快速上手, 可以只看4.1~4.2节
+
+# 响应式系统
+
+## 基本实现
+```js
+const obj = {
+  text: 'test'
+}
+
+function effect() {
+  document.body.innerText = obj.text;
+}
+```
+
+响应式系统其实就是读取数据时拦截添加响应，当数据发生修改时触发添加的响应
+* effect执行时，会触发obj.text的**读取**操作
+* 当修改obj.text时, 会触发obj.text的**设置**操作
+
+拦截数据的读取操作与设置操作, 即可实现一个响应式数据的基本轮廓
+```js
+// 原始数据
+const originalData = {
+  text: 'test'
+}
+
+// 副作用函数
+function effect() {
+  document.body.innerText = originalData.text;
+}
+
+// 存储副作用函数
+const bucket = new Set();
+
+const proxyObj = new Proxy(originalData, {
+  get(target, key) {
+    bucket.add(effect);
+    return target(key);
+  },
+  set(target, key, newVal) {
+    // set实现
+    target[key] = newVal;
+
+    // 触发副作用函数重新执行
+    bucket.forEach(cb => cb())
+    
+    // 返回true标识操作成功
+    return true;
+  }
+})
+```
+
+## 完善响应式系统
+
+4.1中基本实现了一个响应式系统的最基本轮廓，但是他还有很大的改进
+* 副作用函数硬编码了即直接写死，我们要实现捕获副作用函数，即便其是一个匿名函数
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 原始数据
+const originalData = {
+  text: 'test'
+}
+
+// 使用effect
+effect(() => {
+  document.body.innerText = originalData.text;
+})
+```
+
+这样这个匿名方法就被存到了activeEffect中
+```js
+() => {
+  document.body.innerText = originalData.text;
+}
+```
+
+我们再实现代理
+```js
+// 原始数据
+const originalData = {
+  text: 'test'
+}
+
+// 存储副作用函数
+const bucket = new Set();
+
+const proxyObj = new Proxy(originalData, {
+  get(target, key) {
+    if(activeEffect) {
+      // 收集副作用函数
+      bucket.add(activeEffect);
+    }
+    return target[key];
+  },
+  set(target, key, newVal) {
+    // 触发副作用函数重新执行
+    bucket.forEach(cb => cb())
+    // set实现
+    target[key] = newVal;
+    // 返回true标识操作成功
+    return true;
+  }
+})
+```
+
+完整代码
+```js
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 原始数据
+const originalData = {
+  text: 'test'
+}
+
+// 存储副作用函数
+const bucket = new Set();
+
+const proxyObj = new Proxy(originalData, {
+  get(target, key) {
+    if(activeEffect) {
+      // 收集副作用函数
+      bucket.add(activeEffect);
+    }
+    return target[key];
+  },
+  set(target, key, newVal) {
+    // 触发副作用函数重新执行
+    bucket.forEach(cb => cb())
+    // set实现
+    target[key] = newVal;
+    // 返回true标识操作成功
+    return true;
+  }
+})
+
+// 使用effect
+effect(() => {
+  document.body.innerText = proxyObj.text;
+})
+```
+
+----
+
+到这解决了副作用函数的捕获问题
+
+但是如上代码所示，目前的系统对originalData不同属性的副作用方法都收集到了一个set当中，而实际上我们应该精确到每个属性
+```js
+const originalData = {
+  textA: 'test A',
+  textB: 'test B'
+}
+
+// 1
+effect(() => {
+  originalData.textA;
+})
+
+// 2
+effect(() => {
+  originalData.textB;
+})
+
+// 当修改textB时，应该只触发2的副作用而不触发1的副作用
+originalData.textB = 'test';
+```
+
+我们对于任何一个属性，都应该单独用一个Set对象存储他的副作用方法
+
+此时我们可以考虑使用Map对象，其key与value的含义如下
+* key为originalData的某个属性的属性名
+* value为一个set，存放副作用方法
+
+修改后的代码如下：
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 原始数据
+const originalData = {
+  textA: 'test A',
+  textB: 'test B'
+}
+
+// 存储每个字段的副作用函数
+const dependsMap = new Map();
+
+const proxyObj = new Proxy(originalData, {
+  get(target, key) {
+    // 找到key属性对应的副作用set
+    let dependsSet = dependsMap.get(key);
+    // 如果没有，则创建
+    if(!dependsSet) {
+      dependsMap.set(key, dependsSet = new Set())
+    }
+    // 添加副作用
+    dependsSet.add(activeEffect);
+    
+    return target[key];
+  },
+  set(target, key, newVal) {
+    // set实现
+    target[key] = newVal;
+    // 取出该字段存储副作用函数的set
+    const dependsSet = dependsMap.get(key);
+    // 没有则直接返回
+    if(!dependsSet) {
+      return;
+    }
+    dependsSet && dependsSet.forEach(fn => fn());
+  }
+})
+
+// 使用effect
+effect(() => {
+  document.body.innerText = proxyObj.text;
+})
+```
+
+----
+
+每个对象都有一个Map对象，存放这个对象的每个属性的副作用函数，
+我们可以使用一个WeakMap对象，将所有需要代理的对象的Map对象存放下来，这个WeakMap对象的结构如下
+
+> WeakMap
+> > key: 被代理的对象
+>
+>> value: Map
+> > > key: 被代理的对象的属性
+> >
+> > > value: Set对象，存放被代理的对象的属性的所有副作用函数
+
+修改后的代码如下：
+```js
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 原始数据
+const originalData = {
+  textA: 'test A',
+  textB: 'test B'
+}
+
+// 存储全局某个对象的某个属性的副作用函数
+const globalDependsMap = new WeakMap();
+
+const proxyObj = new Proxy(originalData, {
+  get(target, key) {
+    // 找到当前对象target对应的map
+    let dependsMap = globalDependsMap.get(target);
+    // 没有则为该对象创建
+    if(!dependsMap) {
+      globalDependsMap.set(target, (dependsMap = new Map()));
+    }
+    // 找到key属性对应的副作用set
+    let dependsSet = dependsMap.get(key);
+    // 没有则为该属性创建
+    if(!dependsSet) {
+      dependsMap.set(key, dependsSet = new Set())
+    }
+    // 添加副作用
+    dependsSet.add(activeEffect);
+    
+    return target[key];
+  },
+  set(target, key, newVal) {
+    // set实现
+    target[key] = newVal;
+    
+    // 找到该属性对应的map
+    let dependsMap = globalDependsMap.get(target);
+    // 没有则直接返回
+    if(!dependsMap) {
+      return;
+    }
+    
+    // 取出该字段存储副作用函数的set
+    const dependsSet = dependsMap.get(key);
+    // 没有则直接返回
+    if(!dependsSet) {
+      return;
+    }
+    dependsSet && dependsSet.forEach(fn => fn());
+  }
+})
+
+// 使用effect
+effect(() => {
+  document.body.innerText = proxyObj.textA;
+})
+```
+
+----
+
+为什么使用WeakMap？因为其key是弱引用，不会影响垃圾回收
+
+```js
+const m = new Map();
+const wm = new WeakMap();
+
+(function() {
+  const world = 'hello world';
+  m.set('world', say);
+  
+  const sayWords = {
+    text: 'hello javascript'
+  };
+  wm.set(sayWords, '那咋了')
+})()
+
+// 执行完后，打开wm会发现啥也没
+console.log(m, wm)
+// 如果还是有可能垃圾回收还没触发，可以用下面的方法
+/*
+setTimeout(() => {
+  console.log(m, wm)
+}, 3000)
+*/
+
+```
+
+WeakMap对象的key只能是对象, 而Map的key可以是任何值。
+
+具体差异可以去查mdn，这里使用WeakMap的主要原因就是不影响垃圾回收，
+如果使用Map那么其他方法（对应到vue就是相当于某些unmounted的组件）中的一些被代理的对象将永远无法被垃圾回收
+
+----
+
+这里讲讲一些代码分割与封装
+
+例如上面的对orginalData创建Proxy对象的过程，这里可以封装成通用方法，
+
+对于get中追踪副作用函数的过程可以单独写个方法，同理set中对副作用方法的触发也可以单独写个方法
+```js
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  activeEffect = fn;
+  fn();
+}
+
+// 将对象转为代理对象
+function toProxy(obj) {
+  return new Proxy(obj, {
+    get(target, key) {
+      // 追踪副作用函数
+      track(target, key);
+      // get实现
+      return target[key];
+    },
+    set(target, key, newVal) {
+      // set实现
+      target[key] = newVal;
+      // 副作用函数的触发
+      trigger(target, key)
+    }
+  })
+}
+// get中追踪副作用方法
+function track(target, key) {
+  // 没有activeEffect直接return
+  if(!activeEffect) {
+    return;
+  }
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+}
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  dependsSet && dependsSet.forEach(fn => fn());
+}
+
+/* 以下是测试代码 */
+
+// 原始数据
+const originalData = {
+  textA: 'test A',
+  textB: 'test B'
+}
+
+// 存储全局某个对象的某个属性的副作用函数
+const globalDependsMap = new WeakMap();
+
+// 代理对象
+const proxyObj = toProxy(originalData);
+
+// 使用effect
+effect(() => {
+  document.body.innerText = proxyObj.textA;
+})
+```
+
+到这里，代码结构略显优雅，后续针对某个方法的代码优化可能只写这一个方法，在上述代码中直接替换即可，
+这里也附上最终完整用的测试代码（其实就是直接塞到html里）
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+<script>
+  /* 响应式原理代码区域 */
+  
+  // 用于存放副作用函数
+  let activeEffect;
+
+  // 实现一个方法捕获副作用函数
+  function effect(fn) {
+    activeEffect = fn;
+    fn();
+  }
+
+  // 存储全局某个对象的某个属性的副作用函数
+  const globalDependsMap = new WeakMap();
+  // 将对象转为代理对象
+  function toProxy(obj) {
+    return new Proxy(obj, {
+      get(target, key) {
+        // 追踪副作用函数
+        track(target, key);
+        // get实现
+        return target[key];
+      },
+      set(target, key, newVal) {
+        // set实现
+        target[key] = newVal;
+        // 副作用函数的触发
+        trigger(target, key)
+      }
+    })
+  }
+  // get中追踪副作用方法
+  function track(target, key) {
+    // 没有activeEffect直接return
+    if(!activeEffect) {
+      return;
+    }
+    // 找到当前对象target对应的map
+    let dependsMap = globalDependsMap.get(target);
+    // 没有则为该对象创建
+    if(!dependsMap) {
+      globalDependsMap.set(target, (dependsMap = new Map()));
+    }
+    // 找到key属性对应的副作用set
+    let dependsSet = dependsMap.get(key);
+    // 没有则为该属性创建
+    if(!dependsSet) {
+      dependsMap.set(key, dependsSet = new Set())
+    }
+    // 添加副作用
+    dependsSet.add(activeEffect);
+  }
+  // set中触发副作用方法
+  function trigger(target, key) {
+    // 找到该属性对应的map
+    let dependsMap = globalDependsMap.get(target);
+    // 没有则直接返回
+    if(!dependsMap) {
+      return;
+    }
+
+    // 取出该字段存储副作用函数的set
+    const dependsSet = dependsMap.get(key);
+    // 没有则直接返回
+    if(!dependsSet) {
+      return;
+    }
+    dependsSet && dependsSet.forEach(fn => fn());
+  }
+
+  /* 测试相关代码区域 */
+
+  // 响应式数据测试
+  function reactiveSystemTest() {
+    // 原始数据
+    const originalData = {
+      textA: 'test A',
+      textB: 'test B'
+    }
+
+    // 代理对象
+    const proxyObj = toProxy(originalData);
+
+    let effectCount = 0
+    // 使用effect
+    effect(() => {
+      // 副作用方法执行
+      effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+      document.body.innerText = proxyObj.textA;
+    })
+
+    setTimeout(() => {
+      // 修改数据，查看页面变化
+      proxyObj.textA = 'hahaha';
+      console.log('change', originalData);
+    }, 1500)
+
+    setTimeout(() => {
+      // 修改textB，查看textA的副作用方法是否执行
+      proxyObj.textB = 'bababa';
+      console.log('change', originalData);
+    }, 3000)
+  }
+
+  // WeakMap与Map的垃圾回收测试
+  function weakMapAndMapGarbageCollectionTest() {
+    const m = new Map();
+    const wm = new WeakMap();
+
+    (function() {
+      const world = 'hello world';
+      m.set('world', world);
+
+      const sayWords = {
+        text: 'hello javascript'
+      };
+      wm.set(sayWords, '那咋了')
+    })()
+
+    setTimeout(() => {
+      console.log(m, wm)
+    }, 3000)
+  }
+
+  /* 测试代码执行区域 */
+  try{
+    reactiveSystemTest();
+    // weakMapAndMapGarbageCollectionTest();
+  } catch (e) {
+    console.log(e)
+  }
+</script>
+</body>
+</html>
+```
+
+由于要做笔记的示例代码，单文件编写方便点，燃尽了qwq
+
+## 分支切换
+
+问题来咯, 新增测试代码reactiveSystemTest4BranchSwitch，测试代码执行区域修改为该方法的执行
+```js
+function reactiveSystemTest4BranchSwitch() {
+  // 原始数据
+  const originalData = {
+    ok: true,
+    textA: 'test A',
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+  
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  })
+  
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+}
+
+/* 测试代码执行 */
+try{
+  // reactiveSystemTest();
+  // weakMapAndMapGarbageCollectionTest();
+  
+  reactiveSystemTest4BranchSwitch();
+} catch (e) {
+  console.log(e)
+}
+```
+
+执行结果如下
+```
+originalData.textA的副作用方法初始化辣！
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: true, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'balabala'}
+```
+
+在第一个settimeout中,我们修改了textA的值, 副作用方法执行,这没问题
+
+在第二个settimeout中,我们修改了ok为false,副作用方法也执行,这也没问题
+
+在第三个settimeout中,我们再次修改textA, 但是副作用方法 此时与textA无关,
+因为ok为false，textA永远不会被访问，所以此时不应该再次执行副作用函数，但是还是执行了
+```js
+document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+```
+
+如何解决呢？
+
+其实我们每次执行前将这个属性的依赖绑定清除掉，并在执行副作用时重新触发get中的track重新收集依赖
+
+考虑第三次settimeout，当修改textA时，触发set，set中触发trigger，执行对应的副作用函数
+在执行副作用函数之前，我们先将这个要执行的副作用函数给清除掉，然后再执行，执行时会再去重新收集依赖
+
+我们拿下面这段例子来说明
+
+```js
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  const fn1 = () => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  }
+  // 使用effect
+  effect(fn1)
+
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  
+```
+
+在上述代码2处的settimeout中修改ok, 则ok字段应该对应有一个set, 其中存放着使用过ok字段的所有副作用方法, 当然也包含fn1这个副作用方法,
+set中的trigger执行, 也会触发这个fn1方法执行,
+那么在fn1执行之前, 我们要找到所有存放过fn1这个副作用方法的set, 并将这些set中的这个fn1方法全部删除
+
+在这个例子中, 存放过fn1副作用方法的set有两个, 分别是ok字段对应的set与textA字段对应的set,
+则我们会将这两个set中的fn1删除, 注意这两个set中还可能存放其他的副作用方法
+
+在触发fn1前删除, 删除后再次触发fn1执行, 此时fn1中的代码(**document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';**)
+又会去访问ok字段, 则触发ok字段的get与get中的track方法进行依赖收集, 但是注意, ok的get方法此时应该是返回的false, 因为刚刚settimeout中将其修改为false了,
+那么这个三元表达式不会访问proxyObj.textA, 则textA对应的set中不会再有fn1, 那么再在前面代码示例中第三个settimeout修改textA, 不会再触发fn1
+
+```js
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+
+  const fn1 = () => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  }
+  
+  // 使用effect
+  effect(fn1)
+  
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+```
+
+到这里, 原理我们说明白了, 那么如何去做呢?
+其实也很简单, 我们对activeEffect添加一个数组属性, 在track中将set放进去, 然后再在fn执行时将这个数组中的set的这个副作用方法删除即可,
+具体步骤如下:
+1. 副作用函数上添加属性deps, 他是一个数组, 存放哪些字段的set中有当前的副作用函数
+2. track捕获副作用函数时, 将当前字段对应的set存放进deps这个数组中, 即 deps.push(set)
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除
+4. 执行副作用函数, 触发get, 触发track, 重新收集依赖
+
+接下来我们一条一条进行实现
+
+上述步骤中我们提到, **在真正的副作用函数执行前**, 这其实要求我们对副作用函数封装一层
+```js
+
+const effectFn = () => {
+  // 这是清楚副作用函数的逻辑
+  cleanUp(effectFn);
+  
+  // 捕获副作用函数
+  activeEffect = effectFn;
+  
+  // 触发真正的副作用函数
+  fn();
+}
+
+```
+
+则原先的effect方法变为了如下代码, 也就是步骤1要做的事情
+1. 副作用函数上添加属性deps, 他是一个数组, 存放哪些字段的set中有当前的副作用函数
+```js
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑, 后续实现
+    cleanUp(effectFn);
+    
+    // 捕获副作用函数
+    activeEffect = effectFn;
+    
+    // 触发真正的副作用函数
+    fn();
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+```
+
+步骤2则只需要我们在track方法中添加一行
+2. track捕获副作用函数时, 将当前字段对应的set存放进deps这个数组中, 即 deps.push(set)
+```js
+// get中追踪副作用方法
+function track(target, key) {
+  if(!activeEffect) return;
+  
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  
+  // 要添加的代码 (将副作用函数列表set添加到当前副作用函数的deps数组中)
+  activeEffect.deps.push(dependsSet);
+}
+```
+
+步骤3其实就是步骤1中cleanUp的实现
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除
+```js
+function cleanUp(effectFn) {
+  // effectFn.deps是一个数组, 存放着所有依赖这个副作用方法effectFn的字段的副作用函数列表set
+  for(const deps of effectFn.deps) {
+    // deps则是某个字段的副作用函数列表set, 我们将其中的当前副作用函数effectFn删除即可
+    deps.delete(effectFn);
+  }
+  // 清空副作用函数的deps
+  effectFn.deps.length = 0;
+}
+```
+
+步骤4其实就是步骤1中effectFn的最后一句fn函数的执行
+4. 执行副作用函数, 触发get, 触发track, 重新收集依赖
+
+----
+
+
+其实到这里还有点问题, 问题发生在步骤3中
+3. 在我们修改字段后, 触发trigger, 执行副作用函数, 在真正的副作用函数执行前, 我们拿到副作用函数上deps属性中存放的set, 将这些set中的这个副作用函数删除
+
+trigger中, 我们会去遍历set执行副作用, 例如某次遍历, 我们会在最终副作用fn方法执行前删除set中的effectFn,
+然而删除后, 又会立马触发fn执行, 则立马触发get, 触发track, 重新收集依赖, 导致又将effectFn加回set中
+
+这相当于我们将set中某个元素删除后又将其添加到set中
+```js
+const fn1 = () => {console.log(1);}
+const fn2 = () => {console.log(2);}
+const fn3 = () => {console.log(3);}
+const fn4 = () => {console.log(4);}
+
+const s = new Set([fn1, fn2, fn3, fn4])
+s.forEach(fn => {
+  s.delete(fn);
+  fn();
+  
+  // do something else
+  // ...
+  
+  s.add(fn);
+})
+```
+这会造成代码无限循环执行, 解决方法很简单, 复制出一个set进行执行
+```js
+const fn1 = () => {console.log(1);}
+const fn2 = () => {console.log(2);}
+const fn3 = () => {console.log(3);}
+const fn4 = () => {console.log(4);}
+
+const s = new Set([fn1, fn2, fn3, fn4])
+const setToRun = new Set(s);
+
+setToRun.forEach(fn => {
+  s.delete(fn);
+  fn();
+  
+  // do something else
+  // ...
+  
+  s.add(fn);
+})
+```
+
+即需要将trigger方法修改成如下所示代码
+```js
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  // 新增代码
+  const effectsSetToRun = new Set(dependsSet);
+  effectsSetToRun.forEach(fn => fn());
+  // 删除代码
+  // dependsSet && dependsSet.forEach(fn => fn());
+}
+```
+
+最终输出结果比对
+
+```
+// 原输出结果
+originalData.textA的副作用方法初始化辣！
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: true, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'balabala'}
+
+
+
+// 优化后输出结果
+originalData.textA的副作用方法初始化辣！
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: true, textA: 'hahaha'}
+
+originalData.textA的副作用方法又执行辣！
+after change {ok: false, textA: 'hahaha'}
+
+after change {ok: false, textA: 'balabala'}
+```
+
+可见第三个settimeout中修改textA并不会再次执行effect中放入的匿名函数
+
+至此, 测试代码目前如下所示:
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+<script>
+/* 响应式原理代码区域 */
+
+// 用于存放副作用函数
+let activeEffect;
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    activeEffect = effectFn;
+
+    // 触发真正的副作用函数
+    fn();
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+
+function cleanUp(effectFn) {
+  // effectFn.deps是一个数组, 存放着所有依赖这个副作用方法effectFn的字段的副作用函数列表set
+  for(const deps of effectFn.deps) {
+    // deps则是某个字段的副作用函数列表set, 我们将其中的当前副作用函数effectFn删除即可
+    deps.delete(effectFn);
+  }
+  // 清空副作用函数的deps
+  effectFn.deps.length = 0;
+}
+
+// 存储全局某个对象的某个属性的副作用函数
+const globalDependsMap = new WeakMap();
+// 将对象转为代理对象
+function toProxy(obj) {
+  return new Proxy(obj, {
+    get(target, key) {
+      // 追踪副作用函数
+      track(target, key);
+      // get实现
+      return target[key];
+    },
+    set(target, key, newVal) {
+      // set实现
+      target[key] = newVal;
+      // 副作用函数的触发
+      trigger(target, key)
+    }
+  })
+}
+// get中追踪副作用方法
+function track(target, key) {
+  if(!activeEffect) return;
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  // 将副作用函数列表set添加到当前副作用函数的deps数组中
+  activeEffect.deps.push(dependsSet);
+}
+// set中触发副作用方法
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  const effectsSetToRun = new Set(dependsSet);
+  effectsSetToRun.forEach(fn => fn());
+}
+
+/* 测试相关代码区域 */
+
+// 响应式数据测试
+function reactiveSystemTest() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B'
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.textA;
+  })
+  
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('change', originalData);
+  }, 1500)
+  
+  setTimeout(() => {
+    // 修改textB，查看textA的副作用方法是否执行
+    proxyObj.textB = 'bababa';
+    console.log('change', originalData);
+  }, 3000)
+}
+
+// WeakMap与Map的垃圾回收测试
+function weakMapAndMapGarbageCollectionTest() {
+  const m = new Map();
+  const wm = new WeakMap();
+  
+  (function() {
+    const world = 'hello world';
+    m.set('world', world);
+    
+    const sayWords = {
+      text: 'hello javascript'
+    };
+    wm.set(sayWords, '那咋了')
+  })()
+  
+  setTimeout(() => {
+    console.log(m, wm)
+  }, 3000)
+}
+
+
+function reactiveSystemTest4BranchSwitch() {
+  // 原始数据
+  const originalData = {
+    ok: true,
+    textA: 'test A',
+  }
+  
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+  
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+  // 使用effect
+  effect(() => {
+    // 副作用方法执行
+    effectCount++ === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+    document.body.innerText = proxyObj.ok ? proxyObj.textA : '嘿嘿啥也不是';
+  })
+  // 1
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('after change', originalData);
+  }, 1500)
+  // 2
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.ok = false;
+    console.log('after change', originalData);
+  }, 3000)
+  // 3
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'balabala';
+    console.log('after change', originalData);
+  }, 3000)
+}
+
+/* 测试代码执行区域 */
+try{
+  // reactiveSystemTest();
+  // weakMapAndMapGarbageCollectionTest();
+  
+  reactiveSystemTest4BranchSwitch();
+} catch (e) {
+  console.log(e)
+}
+</script>
+</body>
+</html>
+
+```
+
+## 嵌套的effect与effect栈
+
+嵌套的effect, 顾名思义, 传给effect的副作用函数中还使用了effect
+
+那么什么场景会使用嵌套的effect呢? 很简单的一个场景就是父子组件,
+这里我们不探讨具体场景, 就拿代码来说, 传给effect的副作用函数中还使用了effect这种情况是存在的,
+再考虑是否有兼容的必要才会考虑是否需要支持, 很显然vue3中的某个computed可以中的代码可以包含另外一个computed, 所以当然是有必要支持的
+
+在测试区域添加新的测试方法, 执行后会发现我们现在的代码无法支持嵌套的effect
+```js
+function reactiveSystemTest4NestedEffect() {
+  // 原始数据
+  const originalData = {
+    textA: 'test A',
+    textB: 'test B',
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  // 新增计数器判断副作用方法是初始化还是再次执行
+  let effectCount = 0
+
+  effect(() => {  // 副作用方法1
+    // 副作用方法执行
+    effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+
+    effect(() => {  // 副作用方法2
+      console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+    })
+
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)
+
+    effectCount++;
+  })
+
+  setTimeout(() => {
+    // 修改数据，查看页面变化
+    proxyObj.textA = 'hahaha';
+    console.log('changed', originalData);
+  }, 1500)
+
+}
+```
+上述代码我们在副作用方法1也就是外层输出textA, 在副作用方法2也就是嵌套层输出textB, 并加上了一些输出标识文字
+
+很显然textA修改应该触发1, 触发1则会触发2, 因为2在1里面
+
+也就是说textA修改后, 我们的预期应该是输出textB与textA,
+而textB修改后, 应该只输出textB不会输出textA
+
+然而实际输出如下
+```
+originalData.textA的副作用方法初始化辣！
+初次执行effect:  test B
+初次执行effect:  test A
+
+// 1.5s延迟后
+再次执行effect:  test B
+changed {textA: 'hahaha', textB: 'test B'}
+```
+
+奇怪, 我们修改textA为什么输出的却是textB的值?
+
+其实很简单, 就是内层的effect2覆盖了外层的effect1, 在初始化的时候, activeEffect变量存放的其实是下面的方法
+```js
+() => {  // 副作用方法1
+  // 副作用方法执行
+  effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');
+
+  effect(() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+  })
+
+  console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)
+
+  effectCount++;
+}
+```
+
+
+执行第一句
+* 代码: `effectCount === 0 ? console.log('originalData.textA的副作用方法初始化辣！') : console.log('originalData.textA的副作用方法又执行辣！');`
+* 输出: `originalData.textA的副作用方法初始化辣！`
+
+执行第二句
+* 代码: `effect(() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+  })`
+* 输出: `初次执行effect:  test B`
+* **问题就出在这**, 这时候, effect方法会将activeEffect存放的值修改为副作用方法2
+
+
+这时候activeEffect存放的值是副作用方法2, 也就是
+```js
+() => {  // 副作用方法2
+    console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textB);
+}
+```
+执行第三句
+* 代码: `console.log(effectCount === 0 ? '初次执行effect: ' : '再次执行effect: ' , proxyObj.textA)`
+* 输出: `初次执行effect:  test A`
+* 影响: 此时字段textA对应的副作用set存放的其实是副作用方法2
+
+于是这就导致了当我们1.5秒后再去修改textA时, 执行的却是副作用方法2,
+输出`再次执行effect:  test B`
+
+----
+
+那么如何解决呢? 其实很简单, 我们将activeEffect改为一个数组模拟栈, 遇到新副作用函数压入, 绑定关系后再将栈顶弹出即可
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+const effectStack = [];
+
+// 实现一个方法捕获副作用函数
+function effect(fn) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    effectStack.push(effectFn);
+    activeEffect = effectFn;
+    
+    // 触发真正的副作用函数
+    fn();
+    
+    // 弹出effectStack
+    effectStack.pop();
+    // 将activeEffect指向最上层的副作用函数
+    activeEffect = effectStack[effectStack.length - 1];
+  }
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+  effectFn();
+}
+```
+
+**考虑为什么不在track方法中弹出effectStack?**
+
+```js
+// 用于存放副作用函数
+let activeEffect;
+const effectStack = [];
+
+// get中追踪副作用方法
+function track(target, key) {
+  // 找到当前对象target对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则为该对象创建
+  if(!dependsMap) {
+    globalDependsMap.set(target, (dependsMap = new Map()));
+  }
+  // 找到key属性对应的副作用set
+  let dependsSet = dependsMap.get(key);
+  // 没有则为该属性创建
+  if(!dependsSet) {
+    dependsMap.set(key, dependsSet = new Set())
+  }
+  // 添加副作用
+  dependsSet.add(activeEffect);
+  // 将副作用函数列表set添加到当前副作用函数的deps数组中
+  activeEffect.deps.push(dependsSet);
+  
+  // 弹出effectStack
+  effectStack.pop();
+  // 将activeEffect指向最上层的副作用函数
+  activeEffect = effectStack[effectStack.length - 1];
+}
+```
+
+压入与弹出应该是以副作用函数为维度, 而一个副作用函数可能会有变量的get触发, 当然不能在track中进行该操作
+
+## 避免无限递归循环
+
+如果在一句话中既读取某个变量又修改了这个变量, 那么就会造成无限递归循环
+
+```js
+effect(() => {
+  obj.num = obj.num + 1;
+});
+```
+
+不难理解，读取时触发track，num属性对应set中增加这个副作用函数，随后立马又对num赋值，即触发trigger
+
+这会导致无限循环执行
+```js
+function reactiveSystemTest4AccessAndAssignmentRecursion() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  effect(() => {  // 副作用方法1
+    proxyObj.num = proxyObj.num + 1;
+    console.log('副作用方法执行')
+  })
+
+}
+```
+输出如下: 栈内存溢出
+```
+RangeError: Maximum call stack size exceeded
+```
+
+解决方案？很简单，trigger的时候判断一下当前执行的副作用是不是当前activeEffect，如果是则不执行
+
+```js
+function trigger(target, key) {
+  // 找到该属性对应的map
+  let dependsMap = globalDependsMap.get(target);
+  // 没有则直接返回
+  if(!dependsMap) {
+    return;
+  }
+  
+  // 取出该字段存储副作用函数的set
+  const dependsSet = dependsMap.get(key);
+  // 没有则直接返回
+  if(!dependsSet) {
+    return;
+  }
+  const effectsSetToRun = new Set();
+  
+  // 如果触发的副作用方法与当前activeEffect相同, 则不加入执行set
+  dependsSet && dependsSet.forEach(effectFn => {
+    if(effectFn !== activeEffect) {
+      effectsSetToRun.add(effectFn);
+    }
+  })
+  
+  effectsSetToRun.forEach(fn => fn());
+}
+```
+
+修改后刚才的测试方法输出如下
+```
+副作用方法执行
+```
+
+
+## 调度执行
+执行如下测试方法
+```js
+function reactiveSystemTest4Dispatch() {
+  // 原始数据
+  const originalData = {
+    num: 1
+  }
+
+  // 代理对象
+  const proxyObj = toProxy(originalData);
+
+  effect(() => {  // 副作用方法1
+    console.log(proxyObj.num);
+  })
+
+  proxyObj.num++;
+
+  console.log('结束');
+}
+```
+
+很显然此时的输出为
+```
+1
+2
+结束
+```
+
+如若想要将副作用执行放到下一个事件循环中, 那么我们需要支持副作用方法的**调度**
+
+思路就是给effect方法第二个入参，可以让用户传入一些我们规定好的配置项
+
+```js
+function effect(fn, options = {}) {
+  const effectFn = () => {
+    // 清除副作用函数的逻辑
+    cleanUp(effectFn);
+
+    // 捕获副作用函数
+    effectStack.push(effectFn);
+    activeEffect = effectFn;
+    // 触发真正的副作用函数
+    fn();
+    effectStack.pop();
+    activeEffect = effectStack[effectStack.length - 1];
+  }
+  
+  // 我们在这个副作用函数上加上一个数组, 用于存放哪些字段依赖这个副作用函数, 即存放的元素是字段的副作用函数列表set
+  effectFn.deps = [];
+
+  // 用户定义的options挂在到副作用方法上
+  effectFn.options = options;
+
+  effectFn();
+}
+
+```
+
+
+# js对象与proxy的工作原理
+
+## 直接使用target[key]会有问题
+
+```js
+const obj = {
+  foo: 1,
+  get bar() {
+    return this.foo;
+  }
+}
+
+const p = new Proxy(obj, {
+  get(target, key) {
+    return target[key];
+  }
+  // ...
+})
+```
+
+那么我们使用p.bar，则p的get中相当于返回了 obj.bar
+
+而直接调用obj.bar则会返回 this.foo
+
+此时的this指向obj而非p，导致无法正常触发track与trigger
+
+
+## 使用Reflect
+
+```js
+// 对一个函数进行调用，并传入指定的 this 值和参数列表。
+Reflect.apply(target, thisArgument, argumentsList)
+
+// 使用 new 关键字调用构造函数，并传入指定的参数列表。
+Reflect.construct(target, argumentsList, newTarget)
+
+// 获取对象的属性值。
+Reflect.get(target, propertyKey, receiver)
+
+// 设置对象的属性值。
+Reflect.set(target, propertyKey, value, receiver)
+
+// 删除对象的属性。
+Reflect.deleteProperty(target, propertyKey)
+
+// 定义或修改对象的属性。
+Reflect.defineProperty(target, propertyKey, attributes)
+
+// 获取对象的属性描述符。
+Reflect.getOwnPropertyDescriptor(target, propertyKey)
+
+// 防止新属性被添加到对象。
+Reflect.preventExtensions(target)
+
+// 检查对象是否可以扩展。
+Reflect.isExtensible(target)
+
+// 返回对象的所有属性（包括不可枚举属性）。
+Reflect.ownKeys(target)
+
+// 设置对象的原型。
+Reflect.setPrototypeOf(target, prototype)
+```
+
+其中target是指对哪个对象，receiver相当于修改this，propertyKey是访问的属性的名字
+
+原案例可以修改为
+```js
+const obj = {
+  foo: 1,
+  get bar() {
+    return this.foo;
+  }
+}
+
+const p = new Proxy(obj, {
+  // 第三个参数receiver即为代理对象p
+  get(target, key, receiver) {
+    return Reflect.get(target, key, receiver);
+  }
+  // ...
+})
+```
+
+即获取target的key属性, 同时内部执行时this指针修改指向为receiver
+
+则通过p.bar获取bar属性时, p的get方法
+(**return Reflect.get(target, key, receiver);**)
+相当于返回obj.bar, 但是obj.bar在执行时this指向receiver
+
+这样obj.bar中的返回this.foo相当于返回了p.foo, 这样依然走了代理, 能够正常触发track与trigger
+
+
+
