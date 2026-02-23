@@ -24,17 +24,22 @@
   } from './dist/runtime-dom.js'
 
   const myComponent = {
-    data() {
-      return {
-        name: 'zhangsan',
-        age: 18
-      }
+    // data() {
+    //   return {
+    //     name: 'zhangsan',
+    //     age: 18
+    //   }
+    // },
+
+    // 属性：attrs 与 props，props是组件接收的声明了的属性，没有声明的属性会被放在attrs中
+    // attrs本体并非响应式的，props是响应式的
+    props: {
+      name: String,
+      age: Number,
     },
-    render() {
-      setTimeout(() => {
-        // this.age++;
-        // this.age++;
-      }, 1000)
+
+    render(proxy) {
+      console.log(arguments);
       return h('div', {}, [
         h('p', {}, 'name: ' + this.name),
         h('p', {}, 'age: ' + this.age)
@@ -44,7 +49,13 @@
 
   // 此时h方法接受的是组件对象，我们需要为其新增一个类型，来区分是组件还是元素
   render(
-    h(myComponent),
+    // 组件传参
+    h(myComponent, {
+      name: 'lisi',
+      age: 20,
+      a: 'aaa',
+      b: 'bbb'
+    }),
     app
   )
 
