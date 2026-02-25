@@ -1,4 +1,4 @@
-import {isType, ShapeFlags} from '@vue/shared';
+import {hasOwn, isType, ShapeFlags} from '@vue/shared';
 import { isSameVNode, Text, Fragment } from './createVNode';
 import getSequence from "./seq";
 import {reactive, ReactiveEffect} from "@vue/reactivity";
@@ -139,6 +139,7 @@ export function createRenderer(renderOptions) {
       props: {},
       attrs: {},
       propsOptions,
+      proxy: null,
     }
     
     // 元素更新：n2.el = n1.el
@@ -151,20 +152,52 @@ export function createRenderer(renderOptions) {
     // 通过二者得到attrs
     initProps(instance, n2.props);
     
-    console.log(instance);
+    const publicProperties = {
+      $attrs: (instance) => instance.attrs,
+      
+    }
+    
+    const proxyOfInstance = instance.proxy = new Proxy(instance, {
+      get(target, key) {
+        const { state, props, attrs } = target;
+        if(state && hasOwn(state, key)) {
+          return state[key];
+        } else if(props && hasOwn(props, key)) {
+          return props[key];
+        }
+        // 一些不可修改的如$attrs $slots等属性只有get没有set，并使用publicProperties设置不同的取值策略
+        const getter = publicProperties[key];
+        if(getter) {
+          return getter(target);
+        }
+      },
+      set(target, key, value) {
+        const { state, props } = target;
+        if(state && hasOwn(state, key)) {
+          state[key] = value;
+          return true;
+        } else if(props && hasOwn(props, key)) {
+          console.warn(`Attempting to mutate prop "${String(key)}". Props are readonly.`);
+          return false;
+        } else {
+          target[key] = value;
+        }
+        return true;
+      }
+    })
     
     const componentUpdateFn = () => {
       if(!instance.isMounted) {
         // 将state代理传给render方法，让组件定义时的render方法可以访问到组件的状态数据，
         // vue2中传过去的是createElement，vue3中h方法被暴露在runtime-core中，组件定义时的render方法可以直接使用h方法
-        const subTree = render.call(state, state);  // render执行完返回的就是组件的虚拟节点树
+        const subTree = render.call(proxyOfInstance, proxyOfInstance);  // render执行完返回的就是组件的虚拟节点树
         instance.subTree = subTree;
         // 需要区分首次挂载还是后续更新
         patch(null, subTree, container, anchor);
         
         instance.isMounted = true;
       } else {
-        const subTree = render.call(state, state);
+        const subTree = render.call(proxyOfInstance, proxyOfInstance);
         const prevSubTree = instance.subTree;
         patch(prevSubTree, subTree, container, anchor);
         instance.subTree = subTree;

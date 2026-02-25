@@ -24,5 +24,7 @@ export function isType(value, type) {
     return typeString === expectedString;
 }
 
+export const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
+
 
 export * from './shapeFlags'

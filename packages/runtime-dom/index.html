@@ -39,10 +39,10 @@
     },
 
     render(proxy) {
-      console.log(arguments);
+      console.log(proxy)
       return h('div', {}, [
         h('p', {}, 'name: ' + this.name),
-        h('p', {}, 'age: ' + this.age)
+        h('p', {}, 'age: ' + this.b)
       ])
     }
   }
