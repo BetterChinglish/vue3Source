@@ -2,7 +2,7 @@ import {hasOwn, isType, ShapeFlags} from '@vue/shared';
 import { isSameVNode, Text, Fragment } from './createVNode';
 import getSequence from "./seq";
 import {reactive, ReactiveEffect} from "@vue/reactivity";
-import {h} from "@vue/runtime-core";
+import {createComponentInstance, setupComponent} from './component'
 import { queueJob } from "./scheduler";
 
 // 不关心api层面，可以跨平台
@@ -91,104 +91,14 @@ export function createRenderer(renderOptions) {
     }
   }
   
-  const initProps = (instance, rawProps) => {
-    const props = {};
-    const attrs = {};
-    
-    const definedProps = instance.propsOptions;
-    if(rawProps) {
-      for(const key in rawProps) {
-        const type = definedProps[key];
-        const value = rawProps[key];
-        if(key in definedProps) {
-          // props  用户在组件内定义要接收的props
-          if(!isType(value, type)) {
-            console.error(`key: '${key}' is not format type '${type.name}'`)
-          }
-          props[key] = value;
-        } else {
-          // attrs 传入的参数但是没有定义接收
-          attrs[key] = value;
-        }
-        
-      }
-    }
-    
-    instance.attrs = attrs;
-    // TODO: 应该使用shallowReactive，但是还没有实现shallowReactive，暂时使用reactive代替
-    instance.props = reactive(props);
-  }
   
-  const mountComponent = (n1, n2, container, anchor) => {
-    // 组件可以基于自己的状态重新渲染 => effect 注意虚拟节点为组件时type中存放的才是组件的定义
-    const { data = () => ({}), render, props: propsOptions = {} } = n2.type;
-    
-    // 使用reactive包裹data数据
-    const state = reactive(data());
-    const instance = {
-      // 状态
-      state,
-      // 组件的虚拟节点
-      vnode: n2,
-      // 子树
-      subTree: null,
-      // 是否挂载完成
-      isMounted: false,
-      // 更新函数
-      update: null,
-      props: {},
-      attrs: {},
-      propsOptions,
-      proxy: null,
-    }
-    
-    // 元素更新：n2.el = n1.el
-    // 组件更新: n2.component.subTree.el = n1.component.subTree.el
-    // 其中subTree是组件render方法生成的虚拟节点
-    n2.component = instance;
-    // 我们要得到props和attrs两个变量，其中props是组件定义时声明接收的参数，attrs是组件定义时没有声明的属性
-    // n2.props是传入的所有props
-    // n2.type.props是组件声明接收的props
-    // 通过二者得到attrs
-    initProps(instance, n2.props);
-    
-    const publicProperties = {
-      $attrs: (instance) => instance.attrs,
-      
-    }
-    
-    const proxyOfInstance = instance.proxy = new Proxy(instance, {
-      get(target, key) {
-        const { state, props, attrs } = target;
-        if(state && hasOwn(state, key)) {
-          return state[key];
-        } else if(props && hasOwn(props, key)) {
-          return props[key];
-        }
-        // 一些不可修改的如$attrs $slots等属性只有get没有set，并使用publicProperties设置不同的取值策略
-        const getter = publicProperties[key];
-        if(getter) {
-          return getter(target);
-        }
-      },
-      set(target, key, value) {
-        const { state, props } = target;
-        if(state && hasOwn(state, key)) {
-          state[key] = value;
-          return true;
-        } else if(props && hasOwn(props, key)) {
-          console.warn(`Attempting to mutate prop "${String(key)}". Props are readonly.`);
-          return false;
-        } else {
-          target[key] = value;
-        }
-        return true;
-      }
-    })
+  function setupRenderEffect(instance, container, anchor) {
+    const proxyOfInstance = instance.proxy;
+    const { render } = instance;
     
     const componentUpdateFn = () => {
       if(!instance.isMounted) {
-        // 将state代理传给render方法，让组件定义时的render方法可以访问到组件的状态数据，
+        // 将data代理传给render方法，让组件定义时的render方法可以访问到组件的状态数据，
         // vue2中传过去的是createElement，vue3中h方法被暴露在runtime-core中，组件定义时的render方法可以直接使用h方法
         const subTree = render.call(proxyOfInstance, proxyOfInstance);  // render执行完返回的就是组件的虚拟节点树
         instance.subTree = subTree;
@@ -202,7 +112,7 @@ export function createRenderer(renderOptions) {
         patch(prevSubTree, subTree, container, anchor);
         instance.subTree = subTree;
       }
-
+      
     }
     
     const effect =  new ReactiveEffect(componentUpdateFn, () => {
@@ -214,6 +124,17 @@ export function createRenderer(renderOptions) {
     }
     
     update();
+  }
+  
+  const mountComponent = (n1, n2, container, anchor) => {
+    // 1 创建实例
+    const instance = n2.component = createComponentInstance(n2);
+    
+    // 2 实例属性赋值
+    setupComponent(instance);
+    
+    // 3 使用effect
+    setupRenderEffect(instance, container, anchor);
   }
   
   
